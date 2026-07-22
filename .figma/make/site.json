@@ -1,4 +1,5 @@
 {
+  "title": "Showing availability Calendar",
   "description": "Offers a seamless calendar interface replicating existing workflows to help users manage schedules efficiently with familiar design and functionality.",
   "robots": {
     "index": false
