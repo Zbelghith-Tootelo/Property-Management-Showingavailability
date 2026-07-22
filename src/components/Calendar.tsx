@@ -252,7 +252,7 @@ function MiniCalendar({ selectedDate, onSelect, onClose }: { selectedDate: Date;
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 // Just two states: the full Figma sidebar above the mobile breakpoint, or no
-// sidebar at all at ≤430px (mobile shows the calendar only, reachable instead
+// sidebar at all below the mobile breakpoint (mobile shows the calendar only, reachable instead
 // through the mobile header's grid button). No reduced/icon-only in-between.
 
 function Sidebar({ hidden }: { hidden: boolean }) {
@@ -266,7 +266,7 @@ function Sidebar({ hidden }: { hidden: boolean }) {
 
 // ─── Responsive breakpoint ───────────────────────────────────────────────────
 
-const MOBILE_BREAKPOINT = 430;
+const MOBILE_BREAKPOINT = 1000;
 
 function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(
@@ -453,7 +453,7 @@ function TopBar({ viewDate, view, onPrev, onNext, onToday, onViewChange, onDateS
 
 function DayHeaders({ weekDays, today }: { weekDays: Date[]; today: Date }) {
   return (
-    <div className="flex bg-white rounded-[16px] border border-[#e5e7eb] shrink-0 mx-[32px] max-[430px]:mx-[12px]" style={{height:56}}>
+    <div className="flex bg-white rounded-[16px] border border-[#e5e7eb] shrink-0 mx-[32px] max-[1000px]:mx-[12px]" style={{height:56}}>
       <div style={{width:TIME_COL_W}} className="shrink-0"/>
       {weekDays.map((d,i)=>{
         const isToday=isSameDay(d,today);

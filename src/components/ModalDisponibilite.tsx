@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import svgPaths from "../imports/ModalDisponibilite/svg-2jpbtmv37i";
 
-const MOBILE_MODAL_BREAKPOINT = 430;
+const MOBILE_MODAL_BREAKPOINT = 1000;
 
 function useIsMobileModal(): boolean {
   const [isMobile, setIsMobile] = useState(
@@ -93,7 +93,7 @@ export default function ModalDisponibilite({
   const toggleRecurrence = (r: Recurrence) =>
     setRecurrence((prev) => (prev === r ? null : r));
 
-  // Mobile (≤430px) matches a dedicated Figma layout: stacked fields, Jours/Récurrence
+  // Mobile matches a dedicated Figma layout: stacked fields, Jours/Récurrence
   // always visible (no accordion), and full-width stacked footer buttons.
   if (isMobile) {
     return (
@@ -281,8 +281,8 @@ export default function ModalDisponibilite({
         style={{ width: 600, maxWidth: "calc(100vw - 16px)" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-[16px] pl-[24px] pr-[20px] pt-[20px] max-[430px]:pl-[14px] max-[430px]:pr-[14px]">
-          <p className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#213163] text-[20px] max-[430px]:text-[17px]">
+        <div className="flex items-center justify-between pb-[16px] pl-[24px] pr-[20px] pt-[20px]">
+          <p className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#213163] text-[20px]">
             Disponibilité de la propriété
           </p>
           <button onClick={onClose} className="cursor-pointer bg-transparent border-0 p-0 shrink-0">
@@ -293,12 +293,12 @@ export default function ModalDisponibilite({
         <div className="bg-[#e6ebf0] h-px w-full shrink-0" />
 
         {/* Body */}
-        <div className="flex flex-col gap-[14px] px-[24px] py-[20px] max-[430px]:px-[14px] max-[430px]:py-[14px]">
+        <div className="flex flex-col gap-[14px] px-[24px] py-[20px]">
 
           {/* Type */}
-          <div className="flex gap-[12px] items-center w-full max-[430px]:gap-[6px]">
-            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0 max-[430px]:w-[52px] max-[430px]:text-[12px]">Type</p>
-            <div className="flex flex-1 gap-[8px] min-w-0 max-[430px]:gap-[4px]">
+          <div className="flex gap-[12px] items-center w-full">
+            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0">Type</p>
+            <div className="flex flex-1 gap-[8px] min-w-0">
               {(Object.keys(TYPE_CONFIG) as EventType[]).map((t) => {
                 const cfg = TYPE_CONFIG[t];
                 const active = type !== null && type === t;
@@ -306,13 +306,13 @@ export default function ModalDisponibilite({
                   <button
                     key={t}
                     onClick={() => setType(t)}
-                    className="flex-1 min-w-0 h-[36px] rounded-[999px] flex items-center justify-center gap-[8px] px-[12px] max-[430px]:gap-[4px] max-[430px]:px-[4px] cursor-pointer transition-colors"
+                    className="flex-1 min-w-0 h-[36px] rounded-[999px] flex items-center justify-center gap-[8px] px-[12px] cursor-pointer transition-colors"
                     style={{
                       backgroundColor: active ? cfg.bg : "white",
                       border: `1px solid ${cfg.border}`,
                     }}
                   >
-                    <div className="relative shrink-0 size-[16px] max-[430px]:size-[12px]">
+                    <div className="relative shrink-0 size-[16px]">
                       <svg className="absolute block inset-0 size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 16 16">
                         <rect fill="white" height="14" rx="7" width="14" x="1" y="1" />
                         <rect height="14" rx="7" stroke={active ? "white" : cfg.color} strokeWidth="2" width="14" x="1" y="1" />
@@ -320,7 +320,7 @@ export default function ModalDisponibilite({
                       </svg>
                     </div>
                     <span
-                      className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[14px] truncate min-w-0 max-[430px]:text-[10px]"
+                      className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[14px] truncate min-w-0"
                       style={{ color: active ? "white" : cfg.color }}
                     >
                       {cfg.label}
@@ -332,8 +332,8 @@ export default function ModalDisponibilite({
           </div>
 
           {/* Début */}
-          <div className="flex gap-[12px] items-center w-full max-[430px]:gap-[6px]">
-            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0 max-[430px]:w-[52px] max-[430px]:text-[12px]">Début</p>
+          <div className="flex gap-[12px] items-center w-full">
+            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0">Début</p>
             <div className="flex-1 h-[36px] bg-white rounded-[6px] border border-[#cacfd6] flex items-center pl-[12px] pr-[10px]">
               <input
                 type="time"
@@ -345,8 +345,8 @@ export default function ModalDisponibilite({
           </div>
 
           {/* Fin */}
-          <div className="flex gap-[12px] items-center w-full max-[430px]:gap-[6px]">
-            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0 max-[430px]:w-[52px] max-[430px]:text-[12px]">Fin</p>
+          <div className="flex gap-[12px] items-center w-full">
+            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0">Fin</p>
             <div className="flex-1 h-[36px] bg-white rounded-[6px] border border-[#cacfd6] flex items-center pl-[12px] pr-[10px]">
               <input
                 type="time"
@@ -361,7 +361,7 @@ export default function ModalDisponibilite({
           <div className="bg-white rounded-[8px] border border-[#e6ebf0] w-full overflow-hidden">
             <button
               onClick={() => setRepetitionOpen((v) => !v)}
-              className="w-full flex items-center justify-between pl-[20px] pr-[10px] py-[12px] cursor-pointer bg-transparent border-0 max-[430px]:pl-[12px]"
+              className="w-full flex items-center justify-between pl-[20px] pr-[10px] py-[12px] cursor-pointer bg-transparent border-0"
             >
               <span className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#213163] text-[16px]">
                 {repetitionOpen ? "Répétition" : "Récurrence"}
@@ -375,18 +375,18 @@ export default function ModalDisponibilite({
             </button>
 
             {repetitionOpen && (
-              <div className="flex flex-col gap-[12px] pl-[20px] pr-[10px] pb-[14px] max-[430px]:pl-[12px] max-[430px]:pr-[8px]">
+              <div className="flex flex-col gap-[12px] pl-[20px] pr-[10px] pb-[14px]">
                 {/* Jours */}
-                <div className="flex items-center gap-[12px] w-full max-[430px]:gap-[6px]">
-                  <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[88px] shrink-0 max-[430px]:w-[52px] max-[430px]:text-[12px]">Jours</p>
-                  <div className="flex flex-1 gap-[8px] min-w-0 max-[430px]:gap-[3px]">
+                <div className="flex items-center gap-[12px] w-full">
+                  <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[88px] shrink-0">Jours</p>
+                  <div className="flex flex-1 gap-[8px] min-w-0">
                     {ALL_DAYS.map((day) => {
                       const active = selectedDays.includes(day);
                       return (
                         <button
                           key={day}
                           onClick={() => toggleDay(day)}
-                          className="flex-1 min-w-0 h-[28px] rounded-[999px] flex items-center justify-center px-[10px] max-[430px]:px-[2px] cursor-pointer border transition-colors text-[13px] whitespace-nowrap max-[430px]:text-[11px]"
+                          className="flex-1 min-w-0 h-[28px] rounded-[999px] flex items-center justify-center px-[10px] cursor-pointer border transition-colors text-[13px] whitespace-nowrap"
                           style={{
                             backgroundColor: active ? "#213163" : "white",
                             borderColor: active ? "#213163" : "#cacfd6",
@@ -406,8 +406,8 @@ export default function ModalDisponibilite({
                 )}
 
                 {/* Récurrence */}
-                <div className="flex items-start gap-[12px] w-full max-[430px]:gap-[6px]">
-                  <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] shrink-0 w-[88px] h-[28px] flex items-center max-[430px]:w-[52px] max-[430px]:text-[12px]">Récurrence</p>
+                <div className="flex items-start gap-[12px] w-full">
+                  <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] shrink-0 w-[88px] h-[28px] flex items-center">Récurrence</p>
                   <div className="flex flex-1 gap-[8px] flex-wrap min-w-0">
                     {RECURRENCES.map((r) => {
                       const active = recurrence === r.value;
@@ -448,7 +448,7 @@ export default function ModalDisponibilite({
         <div className="bg-[#e6ebf0] h-px w-full shrink-0" />
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-[24px] py-[14px] max-[430px]:px-[14px]">
+        <div className="flex items-center justify-between px-[24px] py-[14px]">
           <div className="flex gap-[8px] h-[42px] items-center">
             <button
               onClick={onClose}
