@@ -22,6 +22,16 @@ export type Recurrence = "semaine" | "mois";
 export type Day = "Lun" | "Mar" | "Mer" | "Jeu" | "Ven" | "Sam" | "Dim";
 
 const ALL_DAYS: Day[] = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+// Snaps a "HH:MM" value to the nearest 15-minute mark (0/15/30/45), since
+// availabilities are only ever booked on quarter-hour boundaries.
+function roundToQuarterHour(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const rounded = Math.max(0, Math.min(23 * 60 + 45, Math.round((h * 60 + m) / 15) * 15));
+  const hh = String(Math.floor(rounded / 60)).padStart(2, "0");
+  const mm = String(rounded % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
 const RECURRENCES: { label: string; value: Recurrence }[] = [
   { label: "Chaque semaine", value: "semaine" },
   { label: "Chaque mois", value: "mois" },
@@ -149,8 +159,9 @@ export default function ModalDisponibilite({
                 <div className="w-full h-[40px] bg-white border border-[#e6ebf0] rounded-[8px] flex items-center px-[12px]">
                   <input
                     type="time"
+                    step={900}
                     value={debut}
-                    onChange={(e) => setDebut(e.target.value)}
+                    onChange={(e) => setDebut(roundToQuarterHour(e.target.value))}
                     className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
                   />
                 </div>
@@ -160,8 +171,9 @@ export default function ModalDisponibilite({
                 <div className="w-full h-[40px] bg-white border border-[#e6ebf0] rounded-[8px] flex items-center px-[12px]">
                   <input
                     type="time"
+                    step={900}
                     value={fin}
-                    onChange={(e) => setFin(e.target.value)}
+                    onChange={(e) => setFin(roundToQuarterHour(e.target.value))}
                     className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
                   />
                 </div>
@@ -335,8 +347,9 @@ export default function ModalDisponibilite({
             <div className="flex-1 h-[36px] bg-white rounded-[6px] border border-[#cacfd6] flex items-center pl-[12px] pr-[10px]">
               <input
                 type="time"
+                step={900}
                 value={debut}
-                onChange={(e) => setDebut(e.target.value)}
+                onChange={(e) => setDebut(roundToQuarterHour(e.target.value))}
                 className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
               />
             </div>
@@ -348,8 +361,9 @@ export default function ModalDisponibilite({
             <div className="flex-1 h-[36px] bg-white rounded-[6px] border border-[#cacfd6] flex items-center pl-[12px] pr-[10px]">
               <input
                 type="time"
+                step={900}
                 value={fin}
-                onChange={(e) => setFin(e.target.value)}
+                onChange={(e) => setFin(roundToQuarterHour(e.target.value))}
                 className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
               />
             </div>
