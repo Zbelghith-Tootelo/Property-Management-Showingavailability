@@ -251,57 +251,12 @@ function MiniCalendar({ selectedDate, onSelect, onClose }: { selectedDate: Date;
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
-// full (>1200px): the original Figma sidebar. icons (430–1200px): a compact
-// icon-only rail — same nav, no labels. hidden (≤430px): mobile shows the
-// calendar only, reachable instead through the mobile header's grid button.
+// Just two states: the full Figma sidebar above the mobile breakpoint, or no
+// sidebar at all at ≤430px (mobile shows the calendar only, reachable instead
+// through the mobile header's grid button). No reduced/icon-only in-between.
 
-const SIDEBAR_NAV_ITEMS: { icon: string[]; label: string; badge?: number; active?: boolean }[] = [
-  { icon: ICONS.inbox,    label: "Boîte de réception", badge: 7 },
-  { icon: ICONS.send,     label: "Envoi de message" },
-  { icon: ICONS.clock,    label: "Attente de réponse", badge: 3 },
-  { icon: ICONS.home,     label: "Mes propriétés", active: true },
-  { icon: ICONS.report,   label: "Rapports" },
-  { icon: ICONS.calendar, label: "Calendrier" },
-  { icon: ICONS.map,      label: "Carte" },
-  { icon: ICONS.settings, label: "Paramètres" },
-  { icon: ICONS.info,     label: "Aide" },
-];
-
-function IconSidebar() {
-  return (
-    <div className="shrink-0 h-full flex flex-col items-center bg-[#f4f7fe] border-r border-[#e6ebf0] py-[16px] gap-[6px]" style={{width:72}}>
-      <div className="size-[32px] rounded-[8px] bg-[#213163] flex items-center justify-center mb-[12px] shrink-0">
-        <span className="text-white font-['Inter:Bold',sans-serif] font-bold text-[13px]">IC</span>
-      </div>
-      {SIDEBAR_NAV_ITEMS.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          title={item.label}
-          aria-label={item.label}
-          className={`relative size-[44px] flex items-center justify-center rounded-[10px] cursor-pointer border-0 transition-colors shrink-0 ${
-            item.active ? "bg-[#213163]" : "bg-transparent hover:bg-[#e8eef8]"
-          }`}
-        >
-          <Icon paths={item.icon} color={item.active ? "white" : "#1B2559"} size={20}/>
-          {item.badge != null && (
-            <span className="absolute top-[2px] right-[2px] min-w-[16px] h-[16px] px-[3px] rounded-full bg-[#c8102e] text-white text-[10px] font-bold flex items-center justify-center leading-none">
-              {item.badge}
-            </span>
-          )}
-        </button>
-      ))}
-      <div className="flex-1"/>
-      <button type="button" title="Déconnexion" aria-label="Déconnexion" className="size-[44px] flex items-center justify-center rounded-[10px] cursor-pointer border-0 bg-transparent hover:bg-[#e8eef8] transition-colors shrink-0">
-        <Icon paths={ICONS.logout} color="#1B2559" size={20}/>
-      </button>
-    </div>
-  );
-}
-
-function Sidebar({ mode }: { mode: "full" | "icons" | "hidden" }) {
-  if (mode === "hidden") return null;
-  if (mode === "icons") return <IconSidebar/>;
+function Sidebar({ hidden }: { hidden: boolean }) {
+  if (hidden) return null;
   return (
     <div className="shrink-0 h-full" style={{width:292}}>
       <ImportedSidebar />
@@ -309,33 +264,22 @@ function Sidebar({ mode }: { mode: "full" | "icons" | "hidden" }) {
   );
 }
 
-// ─── Responsive breakpoints ──────────────────────────────────────────────────
-// >1200px: full sidebar. 430–1200px: icon-only sidebar ("tablet"). ≤430px: no
-// sidebar, mobile header instead ("mobile"). The TopBar itself is unchanged
-// across desktop and tablet — only the sidebar adapts in that range.
+// ─── Responsive breakpoint ───────────────────────────────────────────────────
 
 const MOBILE_BREAKPOINT = 430;
-const TABLET_BREAKPOINT = 1200;
 
-function getBreakpoint(): "desktop" | "tablet" | "mobile" {
-  if (typeof window === "undefined") return "desktop";
-  if (window.innerWidth <= MOBILE_BREAKPOINT) return "mobile";
-  if (window.innerWidth <= TABLET_BREAKPOINT) return "tablet";
-  return "desktop";
-}
-
-function useBreakpoint(): "desktop" | "tablet" | "mobile" {
-  const [bp, setBp] = useState(getBreakpoint);
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth <= MOBILE_BREAKPOINT
+  );
   useEffect(() => {
-    const mqlMobile = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
-    const mqlTablet = window.matchMedia(`(max-width: ${TABLET_BREAKPOINT}px)`);
-    const onChange = () => setBp(getBreakpoint());
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+    const onChange = () => setIsMobile(mql.matches);
     onChange();
-    mqlMobile.addEventListener("change", onChange);
-    mqlTablet.addEventListener("change", onChange);
-    return () => { mqlMobile.removeEventListener("change", onChange); mqlTablet.removeEventListener("change", onChange); };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
   }, []);
-  return bp;
+  return isMobile;
 }
 
 // ─── Mobile header ────────────────────────────────────────────────────────────
@@ -358,9 +302,7 @@ function GridIcon({ color = "#1B2559", size = 20 }: { color?: string; size?: num
 function ViewWeekIcon({ color = "#1B2559", size = 18 }: { color?: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="5" width="18" height="14" rx="3" stroke={color} strokeWidth="1.8"/>
-      <path d="M3 10h18" stroke={color} strokeWidth="1.8"/>
-      <path d="M8 5V3M16 5V3" stroke={color} strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M21 12L21 17C21 19.2091 19.2091 21 17 21L15.1765 21M21 12L21 7C21 4.79086 19.2091 3 17 3L15.1765 3M21 12L3 12M3 12L3 7C3 4.79086 4.79086 3 7 3L8.82353 3M3 12L3 17C3 19.2091 4.79086 21 7 21L8.82353 21M8.82353 3L8.82353 21M8.82353 3L12.5294 3L15.1765 3M8.82353 21L12.5294 21L15.1765 21M15.1765 3L15.1765 21" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
@@ -368,8 +310,7 @@ function ViewWeekIcon({ color = "#1B2559", size = 18 }: { color?: string; size?:
 function ViewDayIcon({ color = "#1B2559", size = 18 }: { color?: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth="1.8"/>
-      <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke={color} strokeWidth="1.2"/>
+      <path d="M19 3L5 3M19 21H5M3 10L3 14C3 15.6569 4.34315 17 6 17L18 17C19.6569 17 21 15.6569 21 14V10C21 8.34315 19.6569 7 18 7L6 7C4.34315 7 3 8.34315 3 10Z" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
@@ -512,7 +453,7 @@ function TopBar({ viewDate, view, onPrev, onNext, onToday, onViewChange, onDateS
 
 function DayHeaders({ weekDays, today }: { weekDays: Date[]; today: Date }) {
   return (
-    <div className="flex bg-white rounded-[16px] border border-[#e5e7eb] shrink-0 mx-[32px]" style={{height:56}}>
+    <div className="flex bg-white rounded-[16px] border border-[#e5e7eb] shrink-0 mx-[32px] max-[430px]:mx-[12px]" style={{height:56}}>
       <div style={{width:TIME_COL_W}} className="shrink-0"/>
       {weekDays.map((d,i)=>{
         const isToday=isSameDay(d,today);
@@ -600,9 +541,7 @@ export default function Calendar() {
 
   const [viewDate, setViewDate] = useState<Date>(()=>getWeekStart(new Date()));
   const [view, setView]         = useState<"semaine"|"jour">("semaine");
-  const breakpoint  = useBreakpoint();
-  const isMobile    = breakpoint === "mobile";
-  const sidebarMode = breakpoint === "mobile" ? "hidden" : breakpoint === "tablet" ? "icons" : "full";
+  const isMobile = useIsMobile();
   // Mobile now exposes the same Jour/Semaine toggle as desktop (as icons in
   // MobileHeader), so it follows the `view` state exactly like desktop does.
   const isDayView = view === "jour";
@@ -831,7 +770,7 @@ export default function Calendar() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{backgroundColor:"#f4f7fe"}}>
-      <Sidebar mode={sidebarMode}/>
+      <Sidebar hidden={isMobile}/>
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
         {isMobile
           ? <MobileHeader viewDate={viewDate} view={view} onPrev={()=>navigate(-1)} onNext={()=>navigate(1)} onToday={goToday} onViewChange={handleViewChange} onDateSelect={handleDateSelect}/>
