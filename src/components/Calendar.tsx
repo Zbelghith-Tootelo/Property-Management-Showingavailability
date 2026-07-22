@@ -87,18 +87,6 @@ const CARD_DISPLAY: Record<EventType, { label: string; color: string; bg: string
   impossible:     { label: "Impossible",   color: "#ef4444", bg: "rgba(239,68,68,0.10)"  },
 };
 
-// Shape-coded per status (not color alone, WCAG 1.4.1) so the status still
-// reads once the label truncates on narrow mobile columns.
-const STATUS_ICON_PATHS: Record<EventType, string[]> = {
-  "visite-libre": ["M22 11.08V12a10 10 0 11-5.93-9.14", "M22 4L12 14.01l-3-3"], // check-circle
-  "pre-approuve": ["M12 2a10 10 0 110 20A10 10 0 0112 2z", "M12 6v6l4 2"],      // clock
-  impossible:     ["M12 2a10 10 0 110 20A10 10 0 0112 2z", "M15 9l-6 6", "M9 9l6 6"], // x-circle
-};
-
-function StatusIcon({ type, color, size = 10 }: { type: EventType; size?: number; color: string }) {
-  return <Icon paths={STATUS_ICON_PATHS[type]} color={color} size={size} />;
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getWeekStart(date: Date): Date {
@@ -221,9 +209,8 @@ function GhostCard({ type, start, duration, invalid, invalidReason }: { type: Ev
       }}
     >
       <div className="p-[6px]">
-        <span className="flex items-center gap-[4px] text-[11px] font-bold leading-tight" style={{ color }}>
-          {!invalid && <span className="shrink-0 flex"><StatusIcon type={type} color={color} size={9} /></span>}
-          <span className="truncate min-w-0">{invalid ? (invalidReason ?? "Chevauchement impossible") : cfg.label}</span>
+        <span className="text-[11px] font-bold truncate leading-tight block" style={{ color }}>
+          {invalid ? (invalidReason ?? "Chevauchement impossible") : cfg.label}
         </span>
         {height >= 34 && (
           <span className="text-[14px] font-semibold text-[#1b2559] block truncate mt-[1px]">
@@ -502,6 +489,7 @@ interface CardProps {
 }
 
 function EventCard({ event, isDragging, onMoveStart, onResizeStart, onEditClick }: CardProps) {
+  const isMobile = useIsMobile();
   const cfg    = CARD_DISPLAY[event.type];
   const top    = ((event.startMinutes - HOUR_START * 60) / 60) * ROW_HEIGHT + 2;
   const height = Math.max(((event.endMinutes - event.startMinutes) / 60) * ROW_HEIGHT - 4, 24);
@@ -523,15 +511,19 @@ function EventCard({ event, isDragging, onMoveStart, onResizeStart, onEditClick 
       onMouseDown={onMoveStart}
     >
       <div className="p-[6px] h-full flex flex-col justify-start">
-        <span className="flex items-center gap-[4px] text-[11px] font-['Inter:Bold',sans-serif] font-bold leading-tight" style={{color:cfg.color}}>
-          <span className="shrink-0 flex"><StatusIcon type={event.type} color={cfg.color} size={9} /></span>
-          <span className="truncate min-w-0">{cfg.label}</span>
+        <span className="text-[11px] font-['Inter:Bold',sans-serif] font-bold truncate leading-tight block" style={{color:cfg.color}}>
+          {cfg.label}
         </span>
-        {height >= 34 && (
+        {height >= 34 && (isMobile ? (
+          <span className="text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] leading-tight mt-[1px]">
+            <span className="block whitespace-nowrap">{minutesToDisplay(event.startMinutes)}</span>
+            <span className="block whitespace-nowrap">{minutesToDisplay(event.endMinutes)}</span>
+          </span>
+        ) : (
           <span className="text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] block truncate leading-tight mt-[1px]">
             {minutesToDisplay(event.startMinutes)} – {minutesToDisplay(event.endMinutes)}
           </span>
-        )}
+        ))}
         {/* Edit button */}
         <button
           data-edit="true"
