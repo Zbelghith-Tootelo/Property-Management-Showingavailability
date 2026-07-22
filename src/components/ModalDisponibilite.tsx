@@ -18,14 +18,13 @@ function useIsMobileModal(): boolean {
 }
 
 export type EventType = "visite-libre" | "pre-approuve" | "impossible";
-export type Recurrence = "semaine" | "mois" | "annee";
+export type Recurrence = "semaine" | "mois";
 export type Day = "Lun" | "Mar" | "Mer" | "Jeu" | "Ven" | "Sam" | "Dim";
 
 const ALL_DAYS: Day[] = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const RECURRENCES: { label: string; value: Recurrence }[] = [
   { label: "Chaque semaine", value: "semaine" },
   { label: "Chaque mois", value: "mois" },
-  { label: "Chaque année", value: "annee" },
 ];
 
 export const TYPE_CONFIG: Record<EventType, { label: string; color: string; bg: string; border: string; textActive: string }> = {
@@ -80,7 +79,6 @@ export default function ModalDisponibilite({
   const [type, setType] = useState<EventType | null>(mode === "edit" ? initialType : null);
   const [debut, setDebut] = useState(startTime);
   const [fin, setFin] = useState(endTime);
-  const [repetitionOpen, setRepetitionOpen] = useState(false);
   const [selectedDays, setSelectedDays] = useState<Day[]>([dayOfWeek]);
   const [recurrence, setRecurrence] = useState<Recurrence | null>(null);
   const canSave = type !== null && selectedDays.length > 0;
@@ -357,81 +355,59 @@ export default function ModalDisponibilite({
             </div>
           </div>
 
-          {/* Répétition accordion */}
-          <div className="bg-white rounded-[8px] border border-[#e6ebf0] w-full overflow-hidden">
-            <button
-              onClick={() => setRepetitionOpen((v) => !v)}
-              className="w-full flex items-center justify-between pl-[20px] pr-[10px] py-[12px] cursor-pointer bg-transparent border-0"
-            >
-              <span className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#213163] text-[16px]">
-                {repetitionOpen ? "Répétition" : "Récurrence"}
-              </span>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path
-                  d={repetitionOpen ? "M12 10L8 6L4 10" : "M6 12L10 8L6 4"}
-                  stroke="#1B2559" strokeLinecap="round" strokeWidth="2"
-                />
-              </svg>
-            </button>
+          {/* Jours */}
+          <div className="flex items-center gap-[12px] w-full">
+            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0">Jours</p>
+            <div className="flex flex-1 gap-[8px] min-w-0">
+              {ALL_DAYS.map((day) => {
+                const active = selectedDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    onClick={() => toggleDay(day)}
+                    className="flex-1 min-w-0 h-[36px] rounded-[999px] flex items-center justify-center px-[10px] cursor-pointer border transition-colors text-[13px] whitespace-nowrap"
+                    style={{
+                      backgroundColor: active ? "#213163" : "white",
+                      borderColor: active ? "#213163" : "#cacfd6",
+                      color: active ? "white" : "#111",
+                      fontFamily: "'Inter:Medium', sans-serif",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {selectedDays.length === 0 && (
+            <p className="text-[#c8102e] text-[12px] pl-[89px] -mt-[8px]">Sélectionnez au moins un jour.</p>
+          )}
 
-            {repetitionOpen && (
-              <div className="flex flex-col gap-[12px] pl-[20px] pr-[10px] pb-[14px]">
-                {/* Jours */}
-                <div className="flex items-center gap-[12px] w-full">
-                  <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[88px] shrink-0">Jours</p>
-                  <div className="flex flex-1 gap-[8px] min-w-0">
-                    {ALL_DAYS.map((day) => {
-                      const active = selectedDays.includes(day);
-                      return (
-                        <button
-                          key={day}
-                          onClick={() => toggleDay(day)}
-                          className="flex-1 min-w-0 h-[28px] rounded-[999px] flex items-center justify-center px-[10px] cursor-pointer border transition-colors text-[13px] whitespace-nowrap"
-                          style={{
-                            backgroundColor: active ? "#213163" : "white",
-                            borderColor: active ? "#213163" : "#cacfd6",
-                            color: active ? "white" : "#111",
-                            fontFamily: "'Inter:Medium', sans-serif",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {day}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                {selectedDays.length === 0 && (
-                  <p className="text-[#c8102e] text-[12px] pl-[100px] -mt-[4px]">Sélectionnez au moins un jour.</p>
-                )}
-
-                {/* Récurrence */}
-                <div className="flex items-start gap-[12px] w-full">
-                  <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] shrink-0 w-[88px] h-[28px] flex items-center">Récurrence</p>
-                  <div className="flex flex-1 gap-[8px] flex-wrap min-w-0">
-                    {RECURRENCES.map((r) => {
-                      const active = recurrence === r.value;
-                      return (
-                        <button
-                          key={r.value}
-                          onClick={() => toggleRecurrence(r.value)}
-                          className="flex-1 h-[28px] rounded-[999px] flex items-center justify-center px-[10px] cursor-pointer border transition-colors text-[13px] whitespace-nowrap"
-                          style={{
-                            backgroundColor: active ? "#213163" : "white",
-                            borderColor: active ? "#213163" : "#cacfd6",
-                            color: active ? "white" : "#111",
-                            fontFamily: "'Inter:Medium', sans-serif",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {r.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* Récurrence */}
+          <div className="flex items-center gap-[12px] w-full">
+            <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0">Récurrence</p>
+            <div className="flex flex-1 gap-[8px] min-w-0">
+              {RECURRENCES.map((r) => {
+                const active = recurrence === r.value;
+                return (
+                  <button
+                    key={r.value}
+                    onClick={() => toggleRecurrence(r.value)}
+                    className="flex-1 min-w-0 h-[36px] rounded-[999px] flex items-center justify-center px-[10px] cursor-pointer border transition-colors text-[13px] whitespace-nowrap"
+                    style={{
+                      backgroundColor: active ? "#213163" : "white",
+                      borderColor: active ? "#213163" : "#cacfd6",
+                      color: active ? "white" : "#111",
+                      fontFamily: "'Inter:Medium', sans-serif",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -461,9 +437,7 @@ export default function ModalDisponibilite({
               title={!canSave ? "Choisissez un type et au moins un jour avant d'enregistrer." : undefined}
               onClick={() => {
                 if (!canSave || !type) return;
-                const days = repetitionOpen ? selectedDays : [dayOfWeek];
-                const rec = repetitionOpen ? recurrence : null;
-                onSave(type, debut, fin, days, rec);
+                onSave(type, debut, fin, selectedDays, recurrence);
               }}
               className={`h-full px-[16px] rounded-[6px] font-['Inter:Bold',sans-serif] font-bold text-white text-[14px] whitespace-nowrap border-0 transition-colors ${
                 canSave ? "bg-[#213163] cursor-pointer hover:bg-[#1a2750]" : "bg-[#a8b0c4] cursor-not-allowed"

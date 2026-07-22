@@ -6,7 +6,7 @@ const DAY_NAME_TO_DOW: Record<string, number> = {
   Dim: 0, Lun: 1, Mar: 2, Mer: 3, Jeu: 4, Ven: 5, Sam: 6,
 };
 
-const RECURRENCE_CYCLES: Record<Recurrence, number> = { semaine: 12, mois: 12, annee: 3 };
+const RECURRENCE_CYCLES: Record<Recurrence, number> = { semaine: 12, mois: 12 };
 
 // Every checked day-of-week always produces an occurrence in the base week;
 // a recurrence frequency (if any) then projects those same weekdays forward.
@@ -25,7 +25,7 @@ function generateRecurringDates(weekStart: Date, days: Day[], recurrence: Recurr
         d.setMonth(occurrence0.getMonth() + c);
         // Guard against month overflow (e.g. Jan 31 + 1 month → Mar 3)
         if (d.getDate() !== occurrence0.getDate()) d.setDate(0);
-      } else if (recurrence === "annee") d.setFullYear(occurrence0.getFullYear() + c);
+      }
       dates.push(dateToISO(d));
     }
   }
@@ -85,6 +85,18 @@ const CARD_DISPLAY: Record<EventType, { label: string; color: string; bg: string
   "pre-approuve": { label: "Disponible",   color: "#3b82f6", bg: "#eef4ff"               },
   impossible:     { label: "Impossible",   color: "#ef4444", bg: "rgba(239,68,68,0.10)"  },
 };
+
+// Shape-coded per status (not color alone, WCAG 1.4.1) so the status still
+// reads once the label truncates on narrow mobile columns.
+const STATUS_ICON_PATHS: Record<EventType, string[]> = {
+  "visite-libre": ["M22 11.08V12a10 10 0 11-5.93-9.14", "M22 4L12 14.01l-3-3"], // check-circle
+  "pre-approuve": ["M12 2a10 10 0 110 20A10 10 0 0112 2z", "M12 6v6l4 2"],      // clock
+  impossible:     ["M12 2a10 10 0 110 20A10 10 0 0112 2z", "M15 9l-6 6", "M9 9l6 6"], // x-circle
+};
+
+function StatusIcon({ type, color, size = 10 }: { type: EventType; size?: number; color: string }) {
+  return <Icon paths={STATUS_ICON_PATHS[type]} color={color} size={size} />;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -202,8 +214,9 @@ function GhostCard({ type, start, duration, invalid }: { type: EventType; start:
       }}
     >
       <div className="p-[6px]">
-        <span className="text-[11px] font-bold block truncate" style={{ color }}>
-          {invalid ? "Chevauchement impossible" : cfg.label}
+        <span className="flex items-center gap-[4px] text-[11px] font-bold leading-tight" style={{ color }}>
+          {!invalid && <span className="shrink-0 flex"><StatusIcon type={type} color={color} size={9} /></span>}
+          <span className="truncate min-w-0">{invalid ? "Chevauchement impossible" : cfg.label}</span>
         </span>
         {height >= 34 && (
           <span className="text-[14px] font-semibold text-[#1b2559] block truncate mt-[1px]">
@@ -503,8 +516,9 @@ function EventCard({ event, isDragging, onMoveStart, onResizeStart, onEditClick 
       onMouseDown={onMoveStart}
     >
       <div className="p-[6px] h-full flex flex-col justify-start">
-        <span className="text-[11px] font-['Inter:Bold',sans-serif] font-bold truncate leading-tight block" style={{color:cfg.color}}>
-          {cfg.label}
+        <span className="flex items-center gap-[4px] text-[11px] font-['Inter:Bold',sans-serif] font-bold leading-tight" style={{color:cfg.color}}>
+          <span className="shrink-0 flex"><StatusIcon type={event.type} color={cfg.color} size={9} /></span>
+          <span className="truncate min-w-0">{cfg.label}</span>
         </span>
         {height >= 34 && (
           <span className="text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] block truncate leading-tight mt-[1px]">
