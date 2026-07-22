@@ -1,45 +1,31 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import ModalDisponibilite, { type EventType, type RecurrenceData } from "./ModalDisponibilite";
+import ModalDisponibilite, { type EventType, type Day, type Recurrence } from "./ModalDisponibilite";
 import ImportedSidebar from "../imports/Sidebar/index";
 
 const DAY_NAME_TO_DOW: Record<string, number> = {
   Dim: 0, Lun: 1, Mar: 2, Mer: 3, Jeu: 4, Ven: 5, Sam: 6,
 };
 
-function generateRecurringDates(baseDate: string, rd: RecurrenceData): string[] {
-  if (!rd) return [baseDate];
-  const base = new Date(baseDate + "T00:00:00");
+const RECURRENCE_CYCLES: Record<Recurrence, number> = { semaine: 12, mois: 12, annee: 3 };
+
+// Every checked day-of-week always produces an occurrence in the base week;
+// a recurrence frequency (if any) then projects those same weekdays forward.
+function generateRecurringDates(weekStart: Date, days: Day[], recurrence: Recurrence | null): string[] {
+  const cycles = recurrence ? RECURRENCE_CYCLES[recurrence] : 1;
   const dates: string[] = [];
 
-  if (rd.recurrence === "jour") {
-    // Every selected day-of-week within the same week as baseDate
-    const sun = new Date(base);
-    sun.setDate(base.getDate() - base.getDay()); // Sunday of that week
-    const daysToUse = rd.days.length > 0 ? rd.days : [Object.keys(DAY_NAME_TO_DOW).find(k => DAY_NAME_TO_DOW[k] === base.getDay()) ?? "Lun"];
-    for (const dayName of daysToUse) {
-      const d = new Date(sun);
-      d.setDate(sun.getDate() + DAY_NAME_TO_DOW[dayName]);
-      dates.push(dateToISO(d));
-    }
-    if (!dates.includes(baseDate)) dates.unshift(baseDate);
-  } else if (rd.recurrence === "semaine") {
-    for (let w = 0; w < 12; w++) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + w * 7);
-      dates.push(dateToISO(d));
-    }
-  } else if (rd.recurrence === "mois") {
-    for (let m = 0; m < 12; m++) {
-      const d = new Date(base);
-      d.setMonth(base.getMonth() + m);
-      // Guard against month overflow (e.g. Jan 31 + 1 month → Mar 3)
-      if (d.getDate() !== base.getDate()) d.setDate(0);
-      dates.push(dateToISO(d));
-    }
-  } else if (rd.recurrence === "annee") {
-    for (let y = 0; y < 3; y++) {
-      const d = new Date(base);
-      d.setFullYear(base.getFullYear() + y);
+  for (const dayName of days) {
+    const occurrence0 = new Date(weekStart);
+    occurrence0.setDate(weekStart.getDate() + DAY_NAME_TO_DOW[dayName]);
+
+    for (let c = 0; c < cycles; c++) {
+      const d = new Date(occurrence0);
+      if (recurrence === "semaine") d.setDate(occurrence0.getDate() + c * 7);
+      else if (recurrence === "mois") {
+        d.setMonth(occurrence0.getMonth() + c);
+        // Guard against month overflow (e.g. Jan 31 + 1 month → Mar 3)
+        if (d.getDate() !== occurrence0.getDate()) d.setDate(0);
+      } else if (recurrence === "annee") d.setFullYear(occurrence0.getFullYear() + c);
       dates.push(dateToISO(d));
     }
   }
@@ -70,6 +56,7 @@ interface DragState {
   duration: number;
   curDate: string;
   curStart: number;
+  invalid: boolean;    // true when the current drop position overlaps another card
 }
 
 interface ResizeState {
@@ -157,6 +144,14 @@ function hasOverlap(events: CalendarEvent[], date: string, start: number, end: n
   return events.some(ev => ev.date === date && ev.id !== excludeId && ev.startMinutes < end && ev.endMinutes > start);
 }
 
+// Resize can never grow into a later card on the same day — this is the hard ceiling for its end time.
+function nextEventStart(events: CalendarEvent[], date: string, afterStart: number, excludeId: string): number {
+  const laterStarts = events
+    .filter(ev => ev.date === date && ev.id !== excludeId && ev.startMinutes > afterStart)
+    .map(ev => ev.startMinutes);
+  return laterStarts.length ? Math.min(...laterStarts) : HOUR_END * 60;
+}
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 function Icon({ paths, color = "currentColor", size = 20 }: { paths: string[]; color?: string; size?: number }) {
@@ -185,8 +180,10 @@ const ICONS = {
 
 // ─── Ghost card (drag preview) ────────────────────────────────────────────────
 
-function GhostCard({ type, start, duration }: { type: EventType; start: number; duration: number }) {
+function GhostCard({ type, start, duration, invalid }: { type: EventType; start: number; duration: number; invalid?: boolean }) {
   const cfg = CARD_DISPLAY[type];
+  const color = invalid ? "#ef4444" : cfg.color;
+  const bg    = invalid ? "rgba(239,68,68,0.16)" : cfg.bg;
   const top    = ((start - HOUR_START * 60) / 60) * ROW_HEIGHT;
   const height = Math.max((duration / 60) * ROW_HEIGHT - 4, 24);
   return (
@@ -195,17 +192,19 @@ function GhostCard({ type, start, duration }: { type: EventType; start: number; 
       style={{
         top,
         height,
-        backgroundColor: cfg.bg,
-        borderLeft: `3px solid ${cfg.color}`,
+        backgroundColor: bg,
+        borderLeft: `3px solid ${color}`,
         opacity: 0.85,
         boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
-        outline: `2px solid ${cfg.color}`,
+        outline: `2px solid ${color}`,
         outlineOffset: 1,
         zIndex: 30,
       }}
     >
       <div className="p-[6px]">
-        <span className="text-[11px] font-bold block truncate" style={{ color: cfg.color }}>{cfg.label}</span>
+        <span className="text-[11px] font-bold block truncate" style={{ color }}>
+          {invalid ? "Chevauchement impossible" : cfg.label}
+        </span>
         {height >= 34 && (
           <span className="text-[14px] font-semibold text-[#1b2559] block truncate mt-[1px]">
             {minutesToDisplay(start)} – {minutesToDisplay(start + duration)}
@@ -252,11 +251,200 @@ function MiniCalendar({ selectedDate, onSelect, onClose }: { selectedDate: Date;
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
+// full (>1200px): the original Figma sidebar. icons (430–1200px): a compact
+// icon-only rail — same nav, no labels. hidden (≤430px): mobile shows the
+// calendar only, reachable instead through the mobile header's grid button.
 
-function Sidebar() {
+const SIDEBAR_NAV_ITEMS: { icon: string[]; label: string; badge?: number; active?: boolean }[] = [
+  { icon: ICONS.inbox,    label: "Boîte de réception", badge: 7 },
+  { icon: ICONS.send,     label: "Envoi de message" },
+  { icon: ICONS.clock,    label: "Attente de réponse", badge: 3 },
+  { icon: ICONS.home,     label: "Mes propriétés", active: true },
+  { icon: ICONS.report,   label: "Rapports" },
+  { icon: ICONS.calendar, label: "Calendrier" },
+  { icon: ICONS.map,      label: "Carte" },
+  { icon: ICONS.settings, label: "Paramètres" },
+  { icon: ICONS.info,     label: "Aide" },
+];
+
+function IconSidebar() {
+  return (
+    <div className="shrink-0 h-full flex flex-col items-center bg-[#f4f7fe] border-r border-[#e6ebf0] py-[16px] gap-[6px]" style={{width:72}}>
+      <div className="size-[32px] rounded-[8px] bg-[#213163] flex items-center justify-center mb-[12px] shrink-0">
+        <span className="text-white font-['Inter:Bold',sans-serif] font-bold text-[13px]">IC</span>
+      </div>
+      {SIDEBAR_NAV_ITEMS.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          title={item.label}
+          aria-label={item.label}
+          className={`relative size-[44px] flex items-center justify-center rounded-[10px] cursor-pointer border-0 transition-colors shrink-0 ${
+            item.active ? "bg-[#213163]" : "bg-transparent hover:bg-[#e8eef8]"
+          }`}
+        >
+          <Icon paths={item.icon} color={item.active ? "white" : "#1B2559"} size={20}/>
+          {item.badge != null && (
+            <span className="absolute top-[2px] right-[2px] min-w-[16px] h-[16px] px-[3px] rounded-full bg-[#c8102e] text-white text-[10px] font-bold flex items-center justify-center leading-none">
+              {item.badge}
+            </span>
+          )}
+        </button>
+      ))}
+      <div className="flex-1"/>
+      <button type="button" title="Déconnexion" aria-label="Déconnexion" className="size-[44px] flex items-center justify-center rounded-[10px] cursor-pointer border-0 bg-transparent hover:bg-[#e8eef8] transition-colors shrink-0">
+        <Icon paths={ICONS.logout} color="#1B2559" size={20}/>
+      </button>
+    </div>
+  );
+}
+
+function Sidebar({ mode }: { mode: "full" | "icons" | "hidden" }) {
+  if (mode === "hidden") return null;
+  if (mode === "icons") return <IconSidebar/>;
   return (
     <div className="shrink-0 h-full" style={{width:292}}>
       <ImportedSidebar />
+    </div>
+  );
+}
+
+// ─── Responsive breakpoints ──────────────────────────────────────────────────
+// >1200px: full sidebar. 430–1200px: icon-only sidebar ("tablet"). ≤430px: no
+// sidebar, mobile header instead ("mobile"). The TopBar itself is unchanged
+// across desktop and tablet — only the sidebar adapts in that range.
+
+const MOBILE_BREAKPOINT = 430;
+const TABLET_BREAKPOINT = 1200;
+
+function getBreakpoint(): "desktop" | "tablet" | "mobile" {
+  if (typeof window === "undefined") return "desktop";
+  if (window.innerWidth <= MOBILE_BREAKPOINT) return "mobile";
+  if (window.innerWidth <= TABLET_BREAKPOINT) return "tablet";
+  return "desktop";
+}
+
+function useBreakpoint(): "desktop" | "tablet" | "mobile" {
+  const [bp, setBp] = useState(getBreakpoint);
+  useEffect(() => {
+    const mqlMobile = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+    const mqlTablet = window.matchMedia(`(max-width: ${TABLET_BREAKPOINT}px)`);
+    const onChange = () => setBp(getBreakpoint());
+    onChange();
+    mqlMobile.addEventListener("change", onChange);
+    mqlTablet.addEventListener("change", onChange);
+    return () => { mqlMobile.removeEventListener("change", onChange); mqlTablet.removeEventListener("change", onChange); };
+  }, []);
+  return bp;
+}
+
+// ─── Mobile header ────────────────────────────────────────────────────────────
+// Back and grid actions are visual-only placeholders: there is no properties
+// list or off-canvas nav to wire them to yet. Everything else — the date
+// picker, the Jour/Semaine toggle, prev/next/today — behaves exactly like the
+// desktop TopBar, just restyled as icon buttons across three stacked rows.
+
+function GridIcon({ color = "#1B2559", size = 20 }: { color?: string; size?: number }) {
+  const pos = [0, 7.5, 15];
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      {pos.flatMap((y) => pos.map((x) => (
+        <rect key={`${x}-${y}`} x={x} y={y} width="5" height="5" rx="1.5" fill={color} />
+      )))}
+    </svg>
+  );
+}
+
+function ViewWeekIcon({ color = "#1B2559", size = 18 }: { color?: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="5" width="18" height="14" rx="3" stroke={color} strokeWidth="1.8"/>
+      <path d="M3 10h18" stroke={color} strokeWidth="1.8"/>
+      <path d="M8 5V3M16 5V3" stroke={color} strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function ViewDayIcon({ color = "#1B2559", size = 18 }: { color?: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth="1.8"/>
+      <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke={color} strokeWidth="1.2"/>
+    </svg>
+  );
+}
+
+function MobileHeader({ viewDate, view, onPrev, onNext, onToday, onViewChange, onDateSelect }: {
+  viewDate: Date; view: "semaine"|"jour";
+  onPrev: () => void; onNext: () => void; onToday: () => void;
+  onViewChange: (v: "semaine"|"jour") => void; onDateSelect: (d: Date) => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showPicker) return;
+    const h = (e: MouseEvent) => { if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setShowPicker(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showPicker]);
+  const label = view === "jour" ? formatDayLabel(viewDate) : formatWeekLabel(viewDate);
+
+  return (
+    <div className="flex flex-col shrink-0" style={{backgroundColor:"#f4f7fe"}}>
+      {/* Row 1 — back / title / menu */}
+      <div className="flex items-center justify-between px-[12px]" style={{height:56}}>
+        <button type="button" aria-label="Retour" className="size-[44px] flex items-center justify-center rounded-[10px] cursor-pointer border-0 bg-transparent hover:bg-[#e8eef8] transition-colors shrink-0">
+          <Icon paths={ICONS.chevL} color="#1B2559" size={20}/>
+        </button>
+        <span className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] text-[16px] truncate px-[8px]">
+          Adresse de la propriété
+        </span>
+        <button type="button" aria-label="Menu" className="size-[44px] flex items-center justify-center rounded-[10px] cursor-pointer border-0 bg-transparent hover:bg-[#e8eef8] transition-colors shrink-0">
+          <GridIcon/>
+        </button>
+      </div>
+
+      {/* Row 2 — date picker + Jour/Semaine icon toggle */}
+      <div className="relative flex items-center gap-[8px] px-[12px] pb-[10px]" ref={pickerRef}>
+        <button onClick={()=>setShowPicker(v=>!v)} type="button" aria-label="Choisir une date" className="bg-white rounded-[10px] size-[38px] flex items-center justify-center cursor-pointer border-0 hover:bg-[#e8eef8] transition-colors shrink-0">
+          <Icon paths={ICONS.calendar} color="#111111" size={18}/>
+        </button>
+        <span className="font-['Inter:Bold',sans-serif] font-bold text-[#1b2559] text-[14px] flex-1 truncate min-w-0">
+          {label}
+        </span>
+        <div className="flex items-center gap-[6px] shrink-0">
+          <button
+            onClick={()=>onViewChange("semaine")}
+            type="button" aria-label="Vue semaine"
+            className="size-[38px] rounded-[10px] flex items-center justify-center border-0 cursor-pointer transition-colors"
+            style={{backgroundColor: view==="semaine" ? "#213163" : "white"}}
+          >
+            <ViewWeekIcon color={view==="semaine" ? "white" : "#1B2559"}/>
+          </button>
+          <button
+            onClick={()=>onViewChange("jour")}
+            type="button" aria-label="Vue jour"
+            className="size-[38px] rounded-[10px] flex items-center justify-center border-0 cursor-pointer transition-colors"
+            style={{backgroundColor: view==="jour" ? "#213163" : "white"}}
+          >
+            <ViewDayIcon color={view==="jour" ? "white" : "#1B2559"}/>
+          </button>
+        </div>
+        {showPicker && <MiniCalendar selectedDate={viewDate} onSelect={d=>{onDateSelect(d);setShowPicker(false);}} onClose={()=>setShowPicker(false)}/>}
+      </div>
+
+      {/* Row 3 — prev / Aujourd'hui / next */}
+      <div className="flex items-center gap-[8px] px-[12px] pb-[10px]">
+        <button onClick={onPrev} type="button" aria-label="Précédent" className="w-[38px] h-[38px] flex items-center justify-center rounded-[10px] bg-white hover:bg-[#e8eef8] cursor-pointer border-0 transition-colors shrink-0">
+          <Icon paths={ICONS.chevL} color="#1B2559" size={16}/>
+        </button>
+        <button onClick={onToday} type="button" className="flex-1 h-[38px] rounded-[10px] cursor-pointer border-0 font-['Lexend:Regular',sans-serif] text-[14px] text-white transition-colors hover:opacity-90" style={{backgroundColor:"#1aa41d"}}>
+          {"Aujourd'hui"}
+        </button>
+        <button onClick={onNext} type="button" aria-label="Suivant" className="w-[38px] h-[38px] flex items-center justify-center rounded-[10px] bg-white hover:bg-[#e8eef8] cursor-pointer border-0 transition-colors shrink-0">
+          <Icon paths={ICONS.chevR} color="#1B2559" size={16}/>
+        </button>
+      </div>
     </div>
   );
 }
@@ -412,6 +600,12 @@ export default function Calendar() {
 
   const [viewDate, setViewDate] = useState<Date>(()=>getWeekStart(new Date()));
   const [view, setView]         = useState<"semaine"|"jour">("semaine");
+  const breakpoint  = useBreakpoint();
+  const isMobile    = breakpoint === "mobile";
+  const sidebarMode = breakpoint === "mobile" ? "hidden" : breakpoint === "tablet" ? "icons" : "full";
+  // Mobile now exposes the same Jour/Semaine toggle as desktop (as icons in
+  // MobileHeader), so it follows the `view` state exactly like desktop does.
+  const isDayView = view === "jour";
   const [events, setEvents]     = useState<CalendarEvent[]>([]);
   const [modal, setModal]       = useState<ModalState|null>(null);
   const [overlapError, setOverlapError] = useState<string|null>(null);
@@ -428,15 +622,15 @@ export default function Calendar() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Derived week data
-  const weekStart = view==="semaine" ? viewDate : getWeekStart(viewDate);
+  const weekStart = isDayView ? getWeekStart(viewDate) : viewDate;
   const weekDays  = Array.from({length:7},(_,i)=>{ const d=new Date(weekStart); d.setDate(d.getDate()+i); return d; });
   const weekDaysRef = useRef(weekDays); weekDaysRef.current = weekDays;
 
   // Navigation
-  const navigate = (delta:number) => setViewDate(d=>{ const n=new Date(d); n.setDate(d.getDate()+delta*(view==="jour"?1:7)); return n; });
-  const goToday  = () => { const t=new Date(today); setViewDate(view==="semaine"?getWeekStart(t):t); };
+  const navigate = (delta:number) => setViewDate(d=>{ const n=new Date(d); n.setDate(d.getDate()+delta*(isDayView?1:7)); return n; });
+  const goToday  = () => { const t=new Date(today); setViewDate(isDayView?t:getWeekStart(t)); };
   const handleViewChange = (v:"semaine"|"jour") => { setView(v); setViewDate(p=>v==="semaine"?getWeekStart(p):p); };
-  const handleDateSelect = (d:Date) => setViewDate(view==="semaine"?getWeekStart(d):d);
+  const handleDateSelect = (d:Date) => setViewDate(isDayView?d:getWeekStart(d));
 
   // Grid click → create
   const handleColumnClick = (e:React.MouseEvent<HTMLDivElement>, date:string) => {
@@ -476,6 +670,7 @@ export default function Calendar() {
       duration:  ev.endMinutes - ev.startMinutes,
       curDate:   ev.date,
       curStart:  ev.startMinutes,
+      invalid:   false,
     });
   }, []);
 
@@ -504,25 +699,29 @@ export default function Calendar() {
       const rawStart = HOUR_START*60 + (relY/ROW_HEIGHT)*60;
       const newStart = clamp(snap(rawStart), HOUR_START*60, HOUR_END*60 - duration);
 
-      // Horizontal → new day (week view only)
+      // Horizontal → new day (week view only; single column in day view)
       let newDate = dragging.origDate;
-      if (view === "semaine") {
+      if (!isDayView) {
         const colW   = (rect.width - TIME_COL_W) / 7;
         const relX   = e.clientX - rect.left - TIME_COL_W;
         const dayIdx = clamp(Math.floor(relX/colW), 0, 6);
         newDate = dateToISO(weekDaysRef.current[dayIdx]);
       }
 
-      setDragging(prev => prev ? {...prev, curDate:newDate, curStart:newStart} : null);
+      const invalid = hasOverlap(eventsRef.current, newDate, newStart, newStart + duration, id);
+      setDragging(prev => prev ? {...prev, curDate:newDate, curStart:newStart, invalid} : null);
     };
 
-    const onUp = (e:MouseEvent) => {
+    const onUp = () => {
       const d = draggingRef.current;
       if (!d) { setDragging(null); return; }
       const moved = d.curDate!==d.origDate || Math.abs(d.curStart-d.origStart)>=SNAP_MIN;
       if (moved) {
-        const newEnd = d.curStart + d.duration;
-        setEvents(prev=>prev.map(ev=>ev.id===id?{...ev,date:d.curDate,startMinutes:d.curStart,endMinutes:newEnd}:ev));
+        // Two cards can never overlap — an invalid drop snaps back to the original slot.
+        if (!d.invalid) {
+          const newEnd = d.curStart + d.duration;
+          setEvents(prev=>prev.map(ev=>ev.id===id?{...ev,date:d.curDate,startMinutes:d.curStart,endMinutes:newEnd}:ev));
+        }
       } else {
         // treat as click → open edit
         const ev = eventsRef.current.find(ev=>ev.id===id);
@@ -534,7 +733,7 @@ export default function Calendar() {
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return ()=>{ window.removeEventListener("mousemove",onMove); window.removeEventListener("mouseup",onUp); };
-  }, [dragging?.id, view]); // eslint-disable-line
+  }, [dragging?.id, isDayView]); // eslint-disable-line
 
   // ── Resize effect ──────────────────────────────────────────────────────────
   useEffect(()=>{
@@ -543,7 +742,11 @@ export default function Calendar() {
     const onMove = (e:MouseEvent) => {
       const deltaY   = e.clientY - startY;
       const deltaMin = snap(deltaY / PX_PER_MIN);
-      const newEnd   = clamp(origEnd+deltaMin, origEnd-origEnd+HOUR_START*60+15, HOUR_END*60);
+      const ev0      = eventsRef.current.find(ev=>ev.id===id);
+      if (!ev0) return;
+      // Two cards can never overlap — cap growth at the start of the next card on this day.
+      const ceiling = Math.min(HOUR_END*60, nextEventStart(eventsRef.current, ev0.date, ev0.startMinutes, id));
+      const newEnd  = clamp(origEnd+deltaMin, ev0.startMinutes+15, ceiling);
       setEvents(prev=>prev.map(ev=>{
         if (ev.id!==id) return ev;
         return {...ev, endMinutes: Math.max(newEnd, ev.startMinutes+15)};
@@ -562,47 +765,43 @@ export default function Calendar() {
     return ()=>{ document.body.style.cursor=""; document.body.style.userSelect=""; };
   },[!!dragging]);
 
-  // Save
-  const handleSave = (type: EventType, start: string, end: string, recurrenceData: RecurrenceData) => {
+  // Save — every checked day in the modal always yields a visible slot on the calendar,
+  // regardless of whether a recurrence frequency was also chosen.
+  const handleSave = (type: EventType, start: string, end: string, days: Day[], recurrence: Recurrence | null) => {
     const startMin = timeToMinutes(start), endMin = timeToMinutes(end);
     if (startMin >= endMin) { setOverlapError("L'heure de fin doit être après l'heure de début."); return; }
 
     const baseDate  = modal!.mode === "create" ? (modal as any).date : (modal as any).event.date;
-    const excludeId = modal!.mode === "edit"   ? (modal as any).event.id : undefined;
+    const weekStart = getWeekStart(new Date(baseDate + "T00:00:00"));
+    const dates     = generateRecurringDates(weekStart, days, recurrence);
 
-    if (!recurrenceData) {
-      // Single event — show error on overlap
-      if (hasOverlap(events, baseDate, startMin, endMin, excludeId)) {
+    if (modal!.mode === "create") {
+      const newEvs = dates
+        .filter(date => !hasOverlap(events, date, startMin, endMin))
+        .map(date => ({ id: newId(), type, date, startMinutes: startMin, endMinutes: endMin }));
+      if (newEvs.length === 0) {
+        setOverlapError(dates.length > 1
+          ? "Toutes les plages sélectionnées chevauchent une disponibilité existante."
+          : "Cette plage horaire chevauche une disponibilité existante. Veuillez choisir un autre créneau.");
+        return;
+      }
+      setEvents(prev => [...prev, ...newEvs]);
+    } else {
+      const target = (modal as any).event as CalendarEvent;
+      if (hasOverlap(events, target.date, startMin, endMin, target.id)) {
         setOverlapError("Cette plage horaire chevauche une disponibilité existante. Veuillez choisir un autre créneau.");
         return;
       }
-      if (modal!.mode === "create") {
-        setEvents(prev => [...prev, { id: newId(), type, date: baseDate, startMinutes: startMin, endMinutes: endMin }]);
-      } else {
-        const target = (modal as any).event as CalendarEvent;
-        setEvents(prev => prev.map(ev => ev.id === target.id ? { ...ev, type, startMinutes: startMin, endMinutes: endMin } : ev));
-      }
-    } else {
-      // Recurring — generate all dates and skip overlapping ones silently
-      const dates = generateRecurringDates(baseDate, recurrenceData);
-      if (modal!.mode === "create") {
-        const newEvs = dates
-          .filter(date => !hasOverlap(events, date, startMin, endMin))
+      setEvents(prev => {
+        const updated = prev.map(ev =>
+          ev.id === target.id ? { ...ev, type, startMinutes: startMin, endMinutes: endMin } : ev
+        );
+        const extra = dates
+          .filter(date => date !== target.date)
+          .filter(date => !hasOverlap(updated, date, startMin, endMin))
           .map(date => ({ id: newId(), type, date, startMinutes: startMin, endMinutes: endMin }));
-        setEvents(prev => [...prev, ...newEvs]);
-      } else {
-        const target = (modal as any).event as CalendarEvent;
-        setEvents(prev => {
-          const updated = prev.map(ev =>
-            ev.id === target.id ? { ...ev, type, startMinutes: startMin, endMinutes: endMin } : ev
-          );
-          const extra = dates
-            .filter(date => date !== baseDate)
-            .filter(date => !hasOverlap(updated, date, startMin, endMin))
-            .map(date => ({ id: newId(), type, date, startMinutes: startMin, endMinutes: endMin }));
-          return [...updated, ...extra];
-        });
-      }
+        return [...updated, ...extra];
+      });
     }
 
     setOverlapError(null);
@@ -616,6 +815,8 @@ export default function Calendar() {
 
   const gridHeight = (HOUR_END-HOUR_START)*ROW_HEIGHT;
   const editEvent  = modal?.mode==="edit" ? (modal as any).event as CalendarEvent : null;
+  const modalDate  = modal ? (modal.mode==="create" ? modal.date : modal.event.date) : null;
+  const modalDayOfWeek = modalDate ? (DAY_NAMES[new Date(modalDate + "T00:00:00").getDay()] as Day) : null;
 
   // Time column
   const TimeCol = () => (
@@ -630,13 +831,15 @@ export default function Calendar() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{backgroundColor:"#f4f7fe"}}>
-      <Sidebar/>
+      <Sidebar mode={sidebarMode}/>
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
-        <TopBar viewDate={viewDate} view={view} onPrev={()=>navigate(-1)} onNext={()=>navigate(1)} onToday={goToday} onViewChange={handleViewChange} onDateSelect={handleDateSelect}/>
-        {view==="semaine"&&<DayHeaders weekDays={weekDays} today={today}/>}
+        {isMobile
+          ? <MobileHeader viewDate={viewDate} view={view} onPrev={()=>navigate(-1)} onNext={()=>navigate(1)} onToday={goToday} onViewChange={handleViewChange} onDateSelect={handleDateSelect}/>
+          : <TopBar viewDate={viewDate} view={view} onPrev={()=>navigate(-1)} onNext={()=>navigate(1)} onToday={goToday} onViewChange={handleViewChange} onDateSelect={handleDateSelect}/>}
+        {!isDayView&&<DayHeaders weekDays={weekDays} today={today}/>}
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-[32px] py-[8px]">
-          {view==="semaine" ? (
+        <div ref={scrollRef} className={`flex-1 overflow-y-auto overflow-x-hidden py-[8px] ${isMobile ? "px-[12px]" : "px-[32px]"}`}>
+          {!isDayView ? (
             <div ref={gridRef} className="flex bg-white rounded-[16px] border border-[#e5e7eb] overflow-hidden" style={{minHeight:gridHeight}}>
               <TimeCol/>
               {weekDays.map((dayDate,dayIdx)=>{
@@ -658,7 +861,7 @@ export default function Calendar() {
                       />
                     ))}
                     {ghostHere && ghostType && dragging && (
-                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration}/>
+                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid}/>
                     )}
                   </div>
                 );
@@ -685,7 +888,7 @@ export default function Calendar() {
                       />
                     ))}
                     {dragging && ghostType && (
-                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration}/>
+                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid}/>
                     )}
                   </div>
                 );
@@ -701,6 +904,7 @@ export default function Calendar() {
           initialType={editEvent?.type??"visite-libre"}
           startTime={modal.mode==="create"?minutesToTime(modal.startMinutes):minutesToTime(editEvent!.startMinutes)}
           endTime={modal.mode==="create"?minutesToTime(modal.endMinutes):minutesToTime(editEvent!.endMinutes)}
+          dayOfWeek={modalDayOfWeek!}
           error={overlapError}
           onClose={()=>{setModal(null);setOverlapError(null);}}
           onSave={handleSave}
