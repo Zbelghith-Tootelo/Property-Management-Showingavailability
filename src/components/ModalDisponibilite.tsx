@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import svgPaths from "../imports/ModalDisponibilite/svg-2jpbtmv37i";
 
 const MOBILE_MODAL_BREAKPOINT = 1000;
@@ -74,6 +75,157 @@ function CloseGlyph({ size = 14 }: { size?: number }) {
   );
 }
 
+// Accepts "10:45", "1045", "945", "10" while typing and resolves it to a
+// 24h "HH:MM" string. Returns null if nothing sensible can be read from it.
+function parseTimeInput(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  let h: number, m: number;
+  if (digits.length <= 2) { h = parseInt(digits, 10); m = 0; }
+  else if (digits.length === 3) { h = parseInt(digits.slice(0, 1), 10); m = parseInt(digits.slice(1), 10); }
+  else { h = parseInt(digits.slice(0, 2), 10); m = parseInt(digits.slice(2, 4), 10); }
+  if (Number.isNaN(h) || Number.isNaN(m) || h > 23 || m > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// Every quarter-hour mark in a day, for the click-to-pick list.
+const QUICK_TIMES = Array.from({ length: 96 }, (_, i) => {
+  const total = i * 15;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+});
+
+function ClockIcon({ size = 14, color = "#8a94a6" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+  );
+}
+
+// A free-text field for typing a time directly, plus a click-to-pick list of
+// quarter-hour marks for browsing instead. Typing the digits and clicking the
+// empty area/clock icon both live on the same control, so there's no native
+// picker (whose minute list ignores `step` on some browsers/OSes) and no
+// separate hour/minute dropdowns to click through one at a time.
+function TimeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setDraft(value), [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    selectedRef.current?.scrollIntoView({ block: "center" });
+
+    const isOutside = (target: Node) =>
+      !wrapRef.current?.contains(target) && !popoverRef.current?.contains(target);
+    const onDocMouseDown = (e: MouseEvent) => { if (isOutside(e.target as Node)) setOpen(false); };
+    // Scrolling the popover's own list (e.g. the scrollIntoView above) must not
+    // count as "the page scrolled" — only close for scrolls outside it.
+    const onScroll = (e: Event) => { if (e.target instanceof Node && isOutside(e.target)) setOpen(false); };
+    const onResize = () => setOpen(false);
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open]);
+
+  const commit = (raw: string) => {
+    const parsed = parseTimeInput(raw);
+    const next = parsed ? roundToQuarterHour(parsed) : value;
+    onChange(next);
+    setDraft(next);
+  };
+
+  const step = (deltaMinutes: number) => {
+    const [h, m] = value.split(":").map(Number);
+    const total = (((h * 60 + m + deltaMinutes) % 1440) + 1440) % 1440;
+    const next = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+    onChange(next);
+    setDraft(next);
+  };
+
+  const pick = (t: string) => {
+    onChange(t);
+    setDraft(t);
+    setOpen(false);
+  };
+
+  const toggleOpen = () => {
+    if (open) { setOpen(false); return; }
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (rect) setCoords({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    setOpen(true);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative flex items-center gap-[6px] flex-1 min-w-0 h-full">
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="HH:MM"
+        value={draft}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { commit(e.currentTarget.value); e.currentTarget.blur(); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); step(15); }
+          else if (e.key === "ArrowDown") { e.preventDefault(); step(-15); }
+        }}
+        className="font-['Inter:Regular',sans-serif] border-0 outline-none bg-transparent text-[#111] text-[14px] w-[52px] shrink-0"
+      />
+      {/* Empty part of the field: click it (or the clock) to browse quarter-hours instead of typing. */}
+      <button
+        type="button"
+        aria-label="Choisir une heure"
+        onClick={toggleOpen}
+        className="flex-1 h-full flex items-center justify-end bg-transparent border-0 p-0 cursor-pointer"
+      >
+        <ClockIcon />
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={popoverRef}
+          style={{ position: "fixed", top: coords.top, right: coords.right }}
+          className="w-[92px] max-h-[176px] overflow-y-auto bg-white border border-[#e6ebf0] rounded-[8px] shadow-[0px_8px_20px_rgba(0,0,0,0.16)] py-[4px] z-[999]"
+        >
+          {QUICK_TIMES.map((t) => {
+            const active = t === value;
+            return (
+              <button
+                key={t}
+                type="button"
+                ref={active ? selectedRef : undefined}
+                onClick={() => pick(t)}
+                className="w-full text-left px-[10px] py-[6px] text-[13px] border-0 cursor-pointer transition-colors"
+                style={{
+                  backgroundColor: active ? "#eef4ff" : "transparent",
+                  color: active ? "#213163" : "#111",
+                  fontWeight: active ? 700 : 400,
+                }}
+              >
+                {t}
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 export default function ModalDisponibilite({
   mode = "create",
   initialType = "visite-libre",
@@ -87,8 +239,8 @@ export default function ModalDisponibilite({
 }: ModalProps) {
   const isMobile = useIsMobileModal();
   const [type, setType] = useState<EventType | null>(mode === "edit" ? initialType : null);
-  const [debut, setDebut] = useState(startTime);
-  const [fin, setFin] = useState(endTime);
+  const [debut, setDebut] = useState(() => roundToQuarterHour(startTime));
+  const [fin, setFin] = useState(() => roundToQuarterHour(endTime));
   const [selectedDays, setSelectedDays] = useState<Day[]>([dayOfWeek]);
   const [recurrence, setRecurrence] = useState<Recurrence | null>(null);
   const canSave = type !== null && selectedDays.length > 0;
@@ -157,25 +309,13 @@ export default function ModalDisponibilite({
               <div className="flex flex-col gap-[8px] flex-1 min-w-0">
                 <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px]">Début</p>
                 <div className="w-full h-[40px] bg-white border border-[#e6ebf0] rounded-[8px] flex items-center px-[12px]">
-                  <input
-                    type="time"
-                    step={900}
-                    value={debut}
-                    onChange={(e) => setDebut(roundToQuarterHour(e.target.value))}
-                    className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
-                  />
+                  <TimeField value={debut} onChange={setDebut} />
                 </div>
               </div>
               <div className="flex flex-col gap-[8px] flex-1 min-w-0">
                 <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px]">Fin</p>
                 <div className="w-full h-[40px] bg-white border border-[#e6ebf0] rounded-[8px] flex items-center px-[12px]">
-                  <input
-                    type="time"
-                    step={900}
-                    value={fin}
-                    onChange={(e) => setFin(roundToQuarterHour(e.target.value))}
-                    className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
-                  />
+                  <TimeField value={fin} onChange={setFin} />
                 </div>
               </div>
             </div>
@@ -345,13 +485,7 @@ export default function ModalDisponibilite({
           <div className="flex gap-[12px] items-center w-full">
             <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0">Début</p>
             <div className="flex-1 h-[36px] bg-white rounded-[6px] border border-[#cacfd6] flex items-center pl-[12px] pr-[10px]">
-              <input
-                type="time"
-                step={900}
-                value={debut}
-                onChange={(e) => setDebut(roundToQuarterHour(e.target.value))}
-                className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
-              />
+              <TimeField value={debut} onChange={setDebut} />
             </div>
           </div>
 
@@ -359,13 +493,7 @@ export default function ModalDisponibilite({
           <div className="flex gap-[12px] items-center w-full">
             <p className="font-['Inter:Bold',sans-serif] font-bold text-[#213163] text-[14px] w-[77px] shrink-0">Fin</p>
             <div className="flex-1 h-[36px] bg-white rounded-[6px] border border-[#cacfd6] flex items-center pl-[12px] pr-[10px]">
-              <input
-                type="time"
-                step={900}
-                value={fin}
-                onChange={(e) => setFin(roundToQuarterHour(e.target.value))}
-                className="font-['Inter:Regular',sans-serif] text-[#111] text-[14px] border-0 outline-none bg-transparent flex-1 min-w-0"
-              />
+              <TimeField value={fin} onChange={setFin} />
             </div>
           </div>
 

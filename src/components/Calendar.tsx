@@ -56,7 +56,8 @@ interface DragState {
   duration: number;
   curDate: string;
   curStart: number;
-  invalid: boolean;    // true when the current drop position overlaps another card
+  invalid: boolean;         // true when the current drop position can't be used
+  invalidReason: string;    // why — shown on the ghost card in place of the type label
 }
 
 interface ResizeState {
@@ -109,6 +110,12 @@ function getWeekStart(date: Date): Date {
 
 function dateToISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+// "YYYY-MM-DD" is zero-padded, so a plain string comparison against today
+// correctly answers "is this date before today" without parsing either side.
+function isPastDate(iso: string, today: Date): boolean {
+  return iso < dateToISO(today);
 }
 
 function formatWeekLabel(ws: Date): string {
@@ -192,7 +199,7 @@ const ICONS = {
 
 // ─── Ghost card (drag preview) ────────────────────────────────────────────────
 
-function GhostCard({ type, start, duration, invalid }: { type: EventType; start: number; duration: number; invalid?: boolean }) {
+function GhostCard({ type, start, duration, invalid, invalidReason }: { type: EventType; start: number; duration: number; invalid?: boolean; invalidReason?: string }) {
   const cfg = CARD_DISPLAY[type];
   const color = invalid ? "#ef4444" : cfg.color;
   const bg    = invalid ? "rgba(239,68,68,0.16)" : cfg.bg;
@@ -216,7 +223,7 @@ function GhostCard({ type, start, duration, invalid }: { type: EventType; start:
       <div className="p-[6px]">
         <span className="flex items-center gap-[4px] text-[11px] font-bold leading-tight" style={{ color }}>
           {!invalid && <span className="shrink-0 flex"><StatusIcon type={type} color={color} size={9} /></span>}
-          <span className="truncate min-w-0">{invalid ? "Chevauchement impossible" : cfg.label}</span>
+          <span className="truncate min-w-0">{invalid ? (invalidReason ?? "Chevauchement impossible") : cfg.label}</span>
         </span>
         {height >= 34 && (
           <span className="text-[14px] font-semibold text-[#1b2559] block truncate mt-[1px]">
@@ -589,6 +596,7 @@ export default function Calendar() {
   const handleColumnClick = (e:React.MouseEvent<HTMLDivElement>, date:string) => {
     if ((e.target as HTMLElement).closest("[data-event]")) return;
     if (draggingRef.current || resizingRef.current) return;
+    if (isPastDate(date, today)) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const y    = e.clientY - rect.top;
     const rawMin  = HOUR_START*60 + (y/ROW_HEIGHT)*60;
@@ -624,6 +632,7 @@ export default function Calendar() {
       curDate:   ev.date,
       curStart:  ev.startMinutes,
       invalid:   false,
+      invalidReason: "",
     });
   }, []);
 
@@ -661,8 +670,13 @@ export default function Calendar() {
         newDate = dateToISO(weekDaysRef.current[dayIdx]);
       }
 
-      const invalid = hasOverlap(eventsRef.current, newDate, newStart, newStart + duration, id);
-      setDragging(prev => prev ? {...prev, curDate:newDate, curStart:newStart, invalid} : null);
+      // A card can never be dropped into the past — same rule as creating one.
+      const invalidReason = isPastDate(newDate, today)
+        ? "Impossible dans le passé"
+        : hasOverlap(eventsRef.current, newDate, newStart, newStart + duration, id)
+          ? "Chevauchement impossible"
+          : "";
+      setDragging(prev => prev ? {...prev, curDate:newDate, curStart:newStart, invalid: !!invalidReason, invalidReason} : null);
     };
 
     const onUp = () => {
@@ -729,13 +743,18 @@ export default function Calendar() {
     const dates     = generateRecurringDates(weekStart, days, recurrence);
 
     if (modal!.mode === "create") {
-      const newEvs = dates
+      // A checked day (e.g. Lundi) can fall earlier in the current week than
+      // the day that was clicked to open the modal — filter those out too.
+      const futureDates = dates.filter(date => !isPastDate(date, today));
+      const newEvs = futureDates
         .filter(date => !hasOverlap(events, date, startMin, endMin))
         .map(date => ({ id: newId(), type, date, startMinutes: startMin, endMinutes: endMin }));
       if (newEvs.length === 0) {
-        setOverlapError(dates.length > 1
-          ? "Toutes les plages sélectionnées chevauchent une disponibilité existante."
-          : "Cette plage horaire chevauche une disponibilité existante. Veuillez choisir un autre créneau.");
+        setOverlapError(futureDates.length === 0
+          ? "Impossible de créer une disponibilité dans le passé."
+          : dates.length > 1
+            ? "Toutes les plages sélectionnées chevauchent une disponibilité existante."
+            : "Cette plage horaire chevauche une disponibilité existante. Veuillez choisir un autre créneau.");
         return;
       }
       setEvents(prev => [...prev, ...newEvs]);
@@ -814,7 +833,7 @@ export default function Calendar() {
                       />
                     ))}
                     {ghostHere && ghostType && dragging && (
-                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid}/>
+                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
                   </div>
                 );
@@ -841,7 +860,7 @@ export default function Calendar() {
                       />
                     ))}
                     {dragging && ghostType && (
-                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid}/>
+                      <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
                   </div>
                 );
