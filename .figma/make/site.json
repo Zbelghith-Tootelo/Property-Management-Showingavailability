@@ -1,0 +1,10 @@
+{
+  "description": "Offers a seamless calendar interface replicating existing workflows to help users manage schedules efficiently with familiar design and functionality.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
