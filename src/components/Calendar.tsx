@@ -515,15 +515,16 @@ function useNow(intervalMs = 60000): Date {
   return now;
 }
 
-// A thin blue rule marking "right now" on today's column — only rendered while
-// the current time falls within the visible hour range, so it never floats
-// above/below the grid.
+// A thin blue rule marking "right now" — spans the full grid, from the edge
+// of the time column to the last day column, rendered once directly on the
+// grid (not per-column) as long as the current time falls within the visible
+// hour range and today is part of what's on screen.
 function NowIndicator({ now }: { now: Date }) {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   if (nowMinutes < HOUR_START * 60 || nowMinutes > HOUR_END * 60) return null;
   const top = ((nowMinutes - HOUR_START * 60) / 60) * ROW_HEIGHT;
   return (
-    <div className="absolute left-0 right-0 pointer-events-none" style={{ top, zIndex: 20 }}>
+    <div className="absolute pointer-events-none" style={{ top, left: TIME_COL_W, right: 0, zIndex: 20 }}>
       <div className="absolute rounded-full bg-[#2563eb]" style={{ left: -5, top: -4, width: 9, height: 9 }} />
       <div className="h-[2px] bg-[#2563eb]" />
     </div>
@@ -905,7 +906,7 @@ export default function Calendar() {
 
         <div ref={scrollRef} className={`flex-1 overflow-y-auto overflow-x-hidden py-[8px] ${isMobile ? "px-[12px]" : "px-[32px]"}`}>
           {!isDayView ? (
-            <div ref={gridRef} className="flex bg-white rounded-[16px] border border-[#e5e7eb] overflow-hidden" style={{minHeight:gridHeight}}>
+            <div ref={gridRef} className="relative flex bg-white rounded-[16px] border border-[#e5e7eb] overflow-hidden" style={{minHeight:gridHeight}}>
               <TimeCol/>
               {weekDays.map((dayDate,dayIdx)=>{
                 const isoDate  = dateToISO(dayDate);
@@ -930,13 +931,13 @@ export default function Calendar() {
                       <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
                     {creatingHere && <CreatePreview start={creating!.curStart} end={creating!.curEnd}/>}
-                    {isSameDay(dayDate, now) && <NowIndicator now={now}/>}
                   </div>
                 );
               })}
+              {weekDays.some(d=>isSameDay(d, now)) && <NowIndicator now={now}/>}
             </div>
           ) : (
-            <div ref={gridRef} className="flex bg-white rounded-[16px] border border-[#e5e7eb] overflow-hidden" style={{minHeight:gridHeight}}>
+            <div ref={gridRef} className="relative flex bg-white rounded-[16px] border border-[#e5e7eb] overflow-hidden" style={{minHeight:gridHeight}}>
               <TimeCol/>
               {(()=>{
                 const isoDate = dateToISO(viewDate);
@@ -960,10 +961,10 @@ export default function Calendar() {
                       <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
                     {creatingHere && <CreatePreview start={creating!.curStart} end={creating!.curEnd}/>}
-                    {isSameDay(viewDate, now) && <NowIndicator now={now}/>}
                   </div>
                 );
               })()}
+              {isSameDay(viewDate, now) && <NowIndicator now={now}/>}
             </div>
           )}
         </div>
