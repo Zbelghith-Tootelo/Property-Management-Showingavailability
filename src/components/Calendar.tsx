@@ -256,7 +256,7 @@ function CreatePreview({ start, end }: { start:number; end:number }) {
 function PastDateNotice({ onClose }: { onClose: () => void }) {
   return (
     <div
-      className="fixed bottom-[24px] left-1/2 -translate-x-1/2 z-[100] flex items-start gap-[12px] bg-[#fff1f2] border border-[#fecdd3] rounded-[12px] shadow-[0px_8px_24px_-4px_rgba(0,0,0,0.16)] px-[16px] py-[14px]"
+      className="fixed top-[24px] left-1/2 -translate-x-1/2 z-[100] flex items-start gap-[12px] bg-[#fff1f2] border border-[#fecdd3] rounded-[12px] shadow-[0px_8px_24px_-4px_rgba(0,0,0,0.16)] px-[16px] py-[14px]"
       style={{maxWidth:"min(460px,92vw)"}}
     >
       <span className="shrink-0 size-[22px] rounded-full bg-[#ef4444] flex items-center justify-center mt-[1px]">
