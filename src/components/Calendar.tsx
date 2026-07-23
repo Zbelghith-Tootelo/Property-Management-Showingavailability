@@ -255,12 +255,19 @@ function CreatePreview({ start, end }: { start:number; end:number }) {
 
 function PastDateNotice({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed bottom-[24px] left-1/2 -translate-x-1/2 z-[100] flex items-center gap-[10px] bg-[#1b2559] text-white rounded-[12px] shadow-[0_8px_24px_rgba(0,0,0,0.25)] px-[16px] py-[12px]" style={{maxWidth:"min(420px,92vw)"}}>
-      <Icon paths={ICONS.info} color="#f87171" size={18}/>
-      <span className="text-[14px] font-medium">
-        Impossible de créer une disponibilité dans le passé — la date doit être aujourd'hui ou plus tard.
+    <div
+      className="fixed bottom-[24px] left-1/2 -translate-x-1/2 z-[100] flex items-start gap-[12px] bg-[#fff1f2] border border-[#fecdd3] rounded-[12px] shadow-[0px_8px_24px_-4px_rgba(0,0,0,0.16)] px-[16px] py-[14px]"
+      style={{maxWidth:"min(460px,92vw)"}}
+    >
+      <span className="shrink-0 size-[22px] rounded-full bg-[#ef4444] flex items-center justify-center mt-[1px]">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
       </span>
-      <button onClick={onClose} aria-label="Fermer" className="shrink-0 size-[22px] flex items-center justify-center rounded-[6px] hover:bg-white/10 cursor-pointer border-0 bg-transparent text-white text-[16px] leading-none">
+      <p className="flex-1 font-['Inter:Bold',sans-serif] font-bold text-[#1b2559] text-[14px] leading-snug">
+        Impossible de créer une disponibilité dans le passé, la date doit être aujourd'hui ou plus tard.
+      </p>
+      <button onClick={onClose} aria-label="Fermer" className="shrink-0 size-[22px] flex items-center justify-center rounded-[6px] hover:bg-black/5 cursor-pointer border-0 bg-transparent text-[#9ca3af] text-[16px] leading-none">
         ×
       </button>
     </div>
