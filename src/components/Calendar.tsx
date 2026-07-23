@@ -67,6 +67,17 @@ interface ResizeState {
   origEnd: number;
 }
 
+interface CreateState {
+  date: string;
+  downClientY: number;  // screen Y at mousedown — how "moved" is measured before committing to a drag
+  anchorMin: number;    // 15-min-snapped time at mousedown, either edge of the dragged range
+  clickStart: number;   // fallback range if the mouse never really moved (a plain click)
+  clickEnd: number;
+  dragged: boolean;
+  curStart: number;
+  curEnd: number;
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const HOUR_START = 7;
@@ -219,6 +230,23 @@ function GhostCard({ type, start, duration, invalid, invalidReason }: { type: Ev
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+// Preview of the range being painted while dragging on empty grid space —
+// dashed, no type yet (that's chosen in the modal that opens on release).
+function CreatePreview({ start, end }: { start:number; end:number }) {
+  const top    = ((start - HOUR_START*60)/60)*ROW_HEIGHT;
+  const height = Math.max(((end-start)/60)*ROW_HEIGHT - 4, 20);
+  return (
+    <div
+      className="absolute inset-x-[3px] rounded-[4px] pointer-events-none flex items-start justify-center pt-[4px]"
+      style={{ top, height, backgroundColor:"rgba(37,99,235,0.12)", border:"1.5px dashed #2563eb", zIndex:25 }}
+    >
+      <span className="text-[12px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#2563eb]">
+        {minutesToDisplay(start)} – {minutesToDisplay(end)}
+      </span>
     </div>
   );
 }
@@ -593,9 +621,11 @@ export default function Calendar() {
 
   const [dragging, setDragging]     = useState<DragState|null>(null);
   const [resizing, setResizing]     = useState<ResizeState|null>(null);
+  const [creating, setCreating]     = useState<CreateState|null>(null);
 
   const draggingRef = useRef(dragging); draggingRef.current = dragging;
   const resizingRef = useRef(resizing); resizingRef.current = resizing;
+  const creatingRef = useRef(creating); creatingRef.current = creating;
   const eventsRef   = useRef(events);   eventsRef.current = events;
 
   // Grid refs for coordinate math
@@ -613,21 +643,57 @@ export default function Calendar() {
   const handleViewChange = (v:"semaine"|"jour") => { setView(v); setViewDate(p=>v==="semaine"?getWeekStart(p):p); };
   const handleDateSelect = (d:Date) => setViewDate(isDayView?d:getWeekStart(d));
 
-  // Grid click → create
-  const handleColumnClick = (e:React.MouseEvent<HTMLDivElement>, date:string) => {
+  // Grid mousedown → either a plain click (default 1h block, snapped to the
+  // hour like before) or, once the mouse actually moves, a drag that lets the
+  // user paint the exact start/end range before the modal opens on release.
+  const handleCreateStart = (e:React.MouseEvent<HTMLDivElement>, date:string) => {
     if ((e.target as HTMLElement).closest("[data-event]")) return;
     if (draggingRef.current || resizingRef.current) return;
     if (isPastDate(date, today)) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const y    = e.clientY - rect.top;
-    const rawMin  = HOUR_START*60 + (y/ROW_HEIGHT)*60;
-    // Ignore exactly where in the hour row the click landed — always start
-    // on the hour, so a click never picks an unintended :15/:30/:45.
-    const startMin = clamp(Math.floor(rawMin/60)*60, HOUR_START*60, (HOUR_END-1)*60);
-    const endMin   = clamp(startMin+60, startMin+15, (HOUR_END-1)*60);
-    setOverlapError(null);
-    setModal({mode:"create",date,startMinutes:startMin,endMinutes:endMin});
+    const grid = gridRef.current;
+    if (!grid) return;
+    const rect      = grid.getBoundingClientRect();
+    const scrollTop = scrollRef.current?.scrollTop ?? 0;
+    const rawMin    = HOUR_START*60 + ((e.clientY - rect.top + scrollTop)/ROW_HEIGHT)*60;
+    const anchorMin = clamp(snap(rawMin), HOUR_START*60, HOUR_END*60);
+    const clickStart = clamp(Math.floor(rawMin/60)*60, HOUR_START*60, (HOUR_END-1)*60);
+    const clickEnd   = clamp(clickStart+60, clickStart+15, (HOUR_END-1)*60);
+    setCreating({date, downClientY:e.clientY, anchorMin, clickStart, clickEnd, dragged:false, curStart:clickStart, curEnd:clickEnd});
   };
+
+  // ── Grid drag-to-create effect ─────────────────────────────────────────────
+  useEffect(()=>{
+    if (!creating) return;
+    const DRAG_THRESHOLD_PX = 6;
+    const {downClientY, anchorMin} = creating;
+
+    const onMove = (e:MouseEvent) => {
+      if (Math.abs(e.clientY - downClientY) < DRAG_THRESHOLD_PX) return;
+      const grid = gridRef.current;
+      if (!grid) return;
+      const rect      = grid.getBoundingClientRect();
+      const scrollTop = scrollRef.current?.scrollTop ?? 0;
+      const rawMin  = HOUR_START*60 + ((e.clientY - rect.top + scrollTop)/ROW_HEIGHT)*60;
+      const curMin  = clamp(snap(rawMin), HOUR_START*60, HOUR_END*60);
+      const start   = Math.min(anchorMin, curMin);
+      const end     = Math.max(anchorMin, curMin, start+SNAP_MIN);
+      setCreating(prev => prev ? {...prev, dragged:true, curStart:start, curEnd:end} : null);
+    };
+
+    const onUp = () => {
+      const c = creatingRef.current;
+      setCreating(null);
+      if (!c) return;
+      setOverlapError(null);
+      setModal(c.dragged
+        ? {mode:"create", date:c.date, startMinutes:c.curStart, endMinutes:c.curEnd}
+        : {mode:"create", date:c.date, startMinutes:c.clickStart, endMinutes:c.clickEnd});
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return ()=>{ window.removeEventListener("mousemove",onMove); window.removeEventListener("mouseup",onUp); };
+  }, [creating?.date, creating?.downClientY]); // eslint-disable-line
 
   const openEdit = (ev:CalendarEvent) => { setOverlapError(null); setModal({mode:"edit",event:ev}); };
 
@@ -844,10 +910,11 @@ export default function Calendar() {
               {weekDays.map((dayDate,dayIdx)=>{
                 const isoDate  = dateToISO(dayDate);
                 const dayEvts  = events.filter(ev=>ev.date===isoDate);
-                const ghostHere = dragging && dragging.curDate===isoDate;
-                const ghostType = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
+                const ghostHere   = dragging && dragging.curDate===isoDate;
+                const ghostType   = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
+                const creatingHere = creating && creating.date===isoDate && creating.dragged;
                 return (
-                  <div key={dayIdx} className="flex-1 relative border-l border-[#f0f0f0]" style={{minHeight:gridHeight,cursor:dragging?"grabbing":"pointer"}} onClick={e=>handleColumnClick(e,isoDate)}>
+                  <div key={dayIdx} className="flex-1 relative border-l border-[#f0f0f0]" style={{minHeight:gridHeight,cursor:(dragging||creating)?"grabbing":"pointer"}} onMouseDown={e=>handleCreateStart(e,isoDate)}>
                     {HOURS.map(h=><div key={h} className="border-b border-[#f0f0f0] hover:bg-[#f9fbff] transition-colors" style={{height:ROW_HEIGHT}}/>)}
                     {dayEvts.map(ev=>(
                       <EventCard
@@ -862,6 +929,7 @@ export default function Calendar() {
                     {ghostHere && ghostType && dragging && (
                       <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
+                    {creatingHere && <CreatePreview start={creating!.curStart} end={creating!.curEnd}/>}
                     {isSameDay(dayDate, now) && <NowIndicator now={now}/>}
                   </div>
                 );
@@ -873,9 +941,10 @@ export default function Calendar() {
               {(()=>{
                 const isoDate = dateToISO(viewDate);
                 const dayEvts = events.filter(ev=>ev.date===isoDate);
-                const ghostType = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
+                const ghostType    = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
+                const creatingHere = creating && creating.date===isoDate && creating.dragged;
                 return (
-                  <div className="flex-1 relative" style={{minHeight:gridHeight,cursor:dragging?"grabbing":"pointer"}} onClick={e=>handleColumnClick(e,isoDate)}>
+                  <div className="flex-1 relative" style={{minHeight:gridHeight,cursor:(dragging||creating)?"grabbing":"pointer"}} onMouseDown={e=>handleCreateStart(e,isoDate)}>
                     {HOURS.map(h=><div key={h} className="border-b border-[#f0f0f0] hover:bg-[#f9fbff] transition-colors" style={{height:ROW_HEIGHT}}/>)}
                     {dayEvts.map(ev=>(
                       <EventCard
@@ -890,6 +959,7 @@ export default function Calendar() {
                     {dragging && ghostType && (
                       <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
+                    {creatingHere && <CreatePreview start={creating!.curStart} end={creating!.curEnd}/>}
                     {isSameDay(viewDate, now) && <NowIndicator now={now}/>}
                   </div>
                 );
