@@ -476,6 +476,32 @@ function DayHeaders({ weekDays, today }: { weekDays: Date[]; today: Date }) {
   );
 }
 
+// ─── Current-time indicator ───────────────────────────────────────────────────
+
+function useNow(intervalMs = 60000): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+// A thin blue rule marking "right now" on today's column — only rendered while
+// the current time falls within the visible hour range, so it never floats
+// above/below the grid.
+function NowIndicator({ now }: { now: Date }) {
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  if (nowMinutes < HOUR_START * 60 || nowMinutes > HOUR_END * 60) return null;
+  const top = ((nowMinutes - HOUR_START * 60) / 60) * ROW_HEIGHT;
+  return (
+    <div className="absolute left-0 right-0 pointer-events-none" style={{ top, zIndex: 20 }}>
+      <div className="absolute rounded-full bg-[#2563eb]" style={{ left: -5, top: -4, width: 9, height: 9 }} />
+      <div className="h-[2px] bg-[#2563eb]" />
+    </div>
+  );
+}
+
 // ─── Event card ───────────────────────────────────────────────────────────────
 
 interface CardProps {
@@ -553,6 +579,7 @@ function EventCard({ event, isDragging, onMoveStart, onResizeStart, onEditClick 
 export default function Calendar() {
   const todayRef = useRef(new Date()); todayRef.current.setHours(0,0,0,0);
   const today = todayRef.current;
+  const now = useNow();
 
   const [viewDate, setViewDate] = useState<Date>(()=>getWeekStart(new Date()));
   const [view, setView]         = useState<"semaine"|"jour">("semaine");
@@ -835,6 +862,7 @@ export default function Calendar() {
                     {ghostHere && ghostType && dragging && (
                       <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
+                    {isSameDay(dayDate, now) && <NowIndicator now={now}/>}
                   </div>
                 );
               })}
@@ -862,6 +890,7 @@ export default function Calendar() {
                     {dragging && ghostType && (
                       <GhostCard type={ghostType} start={dragging.curStart} duration={dragging.duration} invalid={dragging.invalid} invalidReason={dragging.invalidReason}/>
                     )}
+                    {isSameDay(viewDate, now) && <NowIndicator now={now}/>}
                   </div>
                 );
               })()}
