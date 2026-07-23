@@ -251,6 +251,22 @@ function CreatePreview({ start, end }: { start:number; end:number }) {
   );
 }
 
+// ─── Past-date notice ─────────────────────────────────────────────────────────
+
+function PastDateNotice({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed bottom-[24px] left-1/2 -translate-x-1/2 z-[100] flex items-center gap-[10px] bg-[#1b2559] text-white rounded-[12px] shadow-[0_8px_24px_rgba(0,0,0,0.25)] px-[16px] py-[12px]" style={{maxWidth:"min(420px,92vw)"}}>
+      <Icon paths={ICONS.info} color="#f87171" size={18}/>
+      <span className="text-[14px] font-medium">
+        Impossible de créer une disponibilité dans le passé — la date doit être aujourd'hui ou plus tard.
+      </span>
+      <button onClick={onClose} aria-label="Fermer" className="shrink-0 size-[22px] flex items-center justify-center rounded-[6px] hover:bg-white/10 cursor-pointer border-0 bg-transparent text-white text-[16px] leading-none">
+        ×
+      </button>
+    </div>
+  );
+}
+
 // ─── Mini calendar ────────────────────────────────────────────────────────────
 
 function MiniCalendar({ selectedDate, onSelect, onClose }: { selectedDate: Date; onSelect: (d: Date) => void; onClose: () => void }) {
@@ -623,11 +639,22 @@ export default function Calendar() {
   const [dragging, setDragging]     = useState<DragState|null>(null);
   const [resizing, setResizing]     = useState<ResizeState|null>(null);
   const [creating, setCreating]     = useState<CreateState|null>(null);
+  const [pastNotice, setPastNotice] = useState(false);
+  const pastNoticeTimer = useRef<number|undefined>(undefined);
 
   const draggingRef = useRef(dragging); draggingRef.current = dragging;
   const resizingRef = useRef(resizing); resizingRef.current = resizing;
   const creatingRef = useRef(creating); creatingRef.current = creating;
   const eventsRef   = useRef(events);   eventsRef.current = events;
+
+  // Re-triggerable on every past-date click, not just the first — each click
+  // restarts the auto-dismiss countdown instead of being ignored while a
+  // previous notice is still showing.
+  const flashPastNotice = useCallback(() => {
+    setPastNotice(true);
+    window.clearTimeout(pastNoticeTimer.current);
+    pastNoticeTimer.current = window.setTimeout(() => setPastNotice(false), 4000);
+  }, []);
 
   // Grid refs for coordinate math
   const gridRef   = useRef<HTMLDivElement>(null);
@@ -650,7 +677,7 @@ export default function Calendar() {
   const handleCreateStart = (e:React.MouseEvent<HTMLDivElement>, date:string) => {
     if ((e.target as HTMLElement).closest("[data-event]")) return;
     if (draggingRef.current || resizingRef.current) return;
-    if (isPastDate(date, today)) return;
+    if (isPastDate(date, today)) { flashPastNotice(); return; }
     const grid = gridRef.current;
     if (!grid) return;
     const rect      = grid.getBoundingClientRect();
@@ -910,13 +937,14 @@ export default function Calendar() {
               <TimeCol/>
               {weekDays.map((dayDate,dayIdx)=>{
                 const isoDate  = dateToISO(dayDate);
+                const isPast   = isPastDate(isoDate, today);
                 const dayEvts  = events.filter(ev=>ev.date===isoDate);
                 const ghostHere   = dragging && dragging.curDate===isoDate;
                 const ghostType   = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
                 const creatingHere = creating && creating.date===isoDate && creating.dragged;
                 return (
-                  <div key={dayIdx} className="flex-1 relative border-l border-[#f0f0f0]" style={{minHeight:gridHeight,cursor:(dragging||creating)?"grabbing":"pointer"}} onMouseDown={e=>handleCreateStart(e,isoDate)}>
-                    {HOURS.map(h=><div key={h} className="border-b border-[#f0f0f0] hover:bg-[#f9fbff] transition-colors" style={{height:ROW_HEIGHT}}/>)}
+                  <div key={dayIdx} className="flex-1 relative border-l border-[#f0f0f0]" style={{minHeight:gridHeight,cursor:isPast?"not-allowed":(dragging||creating)?"grabbing":"pointer"}} onMouseDown={e=>handleCreateStart(e,isoDate)}>
+                    {HOURS.map(h=><div key={h} className={`border-b border-[#f0f0f0] transition-colors ${isPast ? "hover:bg-[#fef2f2]" : "hover:bg-[#f9fbff]"}`} style={{height:ROW_HEIGHT}}/>)}
                     {dayEvts.map(ev=>(
                       <EventCard
                         key={ev.id}
@@ -941,12 +969,13 @@ export default function Calendar() {
               <TimeCol/>
               {(()=>{
                 const isoDate = dateToISO(viewDate);
+                const isPast  = isPastDate(isoDate, today);
                 const dayEvts = events.filter(ev=>ev.date===isoDate);
                 const ghostType    = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
                 const creatingHere = creating && creating.date===isoDate && creating.dragged;
                 return (
-                  <div className="flex-1 relative" style={{minHeight:gridHeight,cursor:(dragging||creating)?"grabbing":"pointer"}} onMouseDown={e=>handleCreateStart(e,isoDate)}>
-                    {HOURS.map(h=><div key={h} className="border-b border-[#f0f0f0] hover:bg-[#f9fbff] transition-colors" style={{height:ROW_HEIGHT}}/>)}
+                  <div className="flex-1 relative" style={{minHeight:gridHeight,cursor:isPast?"not-allowed":(dragging||creating)?"grabbing":"pointer"}} onMouseDown={e=>handleCreateStart(e,isoDate)}>
+                    {HOURS.map(h=><div key={h} className={`border-b border-[#f0f0f0] transition-colors ${isPast ? "hover:bg-[#fef2f2]" : "hover:bg-[#f9fbff]"}`} style={{height:ROW_HEIGHT}}/>)}
                     {dayEvts.map(ev=>(
                       <EventCard
                         key={ev.id}
@@ -983,6 +1012,8 @@ export default function Calendar() {
           onDelete={modal.mode==="edit"?handleDelete:undefined}
         />
       )}
+
+      {pastNotice && <PastDateNotice onClose={()=>{ window.clearTimeout(pastNoticeTimer.current); setPastNotice(false); }}/>}
     </div>
   );
 }
