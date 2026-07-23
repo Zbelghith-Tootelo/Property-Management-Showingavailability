@@ -58,6 +58,7 @@ interface DragState {
   curStart: number;
   invalid: boolean;         // true when the current drop position can't be used
   invalidReason: string;    // why — shown on the ghost card in place of the type label
+  canOpenEdit: boolean;     // true only if the grab started in the card's header zone
 }
 
 interface ResizeState {
@@ -511,19 +512,23 @@ function EventCard({ event, isDragging, onMoveStart, onResizeStart, onEditClick 
       onMouseDown={onMoveStart}
     >
       <div className="p-[6px] h-full flex flex-col justify-start">
-        <span className="text-[11px] font-['Inter:Bold',sans-serif] font-bold truncate leading-tight block" style={{color:cfg.color}}>
-          {cfg.label}
-        </span>
-        {height >= 34 && (isMobile ? (
-          <span className="text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] leading-tight mt-[1px]">
-            <span className="block whitespace-nowrap">{minutesToDisplay(event.startMinutes)}</span>
-            <span className="block whitespace-nowrap">{minutesToDisplay(event.endMinutes)}</span>
+        {/* Only this header zone (label, time, edit button) can open the edit
+            modal on a plain click — dragging from the body never should. */}
+        <div data-card-header="true">
+          <span className="text-[11px] font-['Inter:Bold',sans-serif] font-bold truncate leading-tight block" style={{color:cfg.color}}>
+            {cfg.label}
           </span>
-        ) : (
-          <span className="text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] block truncate leading-tight mt-[1px]">
-            {minutesToDisplay(event.startMinutes)} – {minutesToDisplay(event.endMinutes)}
-          </span>
-        ))}
+          {height >= 34 && (isMobile ? (
+            <span className="text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] leading-tight mt-[1px]">
+              <span className="block whitespace-nowrap">{minutesToDisplay(event.startMinutes)}</span>
+              <span className="block whitespace-nowrap">{minutesToDisplay(event.endMinutes)}</span>
+            </span>
+          ) : (
+            <span className="text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold text-[#1b2559] block truncate leading-tight mt-[1px]">
+              {minutesToDisplay(event.startMinutes)} – {minutesToDisplay(event.endMinutes)}
+            </span>
+          ))}
+        </div>
         {/* Edit button */}
         <button
           data-edit="true"
@@ -592,7 +597,9 @@ export default function Calendar() {
     const rect = e.currentTarget.getBoundingClientRect();
     const y    = e.clientY - rect.top;
     const rawMin  = HOUR_START*60 + (y/ROW_HEIGHT)*60;
-    const startMin = clamp(snap(rawMin), HOUR_START*60, (HOUR_END-1)*60);
+    // Ignore exactly where in the hour row the click landed — always start
+    // on the hour, so a click never picks an unintended :15/:30/:45.
+    const startMin = clamp(Math.floor(rawMin/60)*60, HOUR_START*60, (HOUR_END-1)*60);
     const endMin   = clamp(startMin+60, startMin+15, (HOUR_END-1)*60);
     setOverlapError(null);
     setModal({mode:"create",date,startMinutes:startMin,endMinutes:endMin});
@@ -604,6 +611,7 @@ export default function Calendar() {
   const handleMoveStart = useCallback((e:React.MouseEvent, eventId:string) => {
     if ((e.target as HTMLElement).closest("[data-resize]")) return;
     if ((e.target as HTMLElement).closest("[data-edit]")) return;
+    const canOpenEdit = !!(e.target as HTMLElement).closest("[data-card-header]");
     e.preventDefault();
     e.stopPropagation();
     const ev = eventsRef.current.find(ev=>ev.id===eventId);
@@ -624,6 +632,7 @@ export default function Calendar() {
       curDate:   ev.date,
       curStart:  ev.startMinutes,
       invalid:   false,
+      canOpenEdit,
       invalidReason: "",
     });
   }, []);
@@ -681,8 +690,10 @@ export default function Calendar() {
           const newEnd = d.curStart + d.duration;
           setEvents(prev=>prev.map(ev=>ev.id===id?{...ev,date:d.curDate,startMinutes:d.curStart,endMinutes:newEnd}:ev));
         }
-      } else {
-        // treat as click → open edit
+      } else if (d.canOpenEdit) {
+        // A plain click that started on the label/time/edit-button zone → open edit.
+        // A click that started on the card's body just releases in place, no-op —
+        // that's the case that used to pop the edit modal open by mistake.
         const ev = eventsRef.current.find(ev=>ev.id===id);
         if (ev) openEdit(ev);
       }
