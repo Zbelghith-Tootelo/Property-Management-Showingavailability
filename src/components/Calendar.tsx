@@ -459,18 +459,25 @@ function TopBar({ viewDate, view, onPrev, onNext, onToday, onViewChange, onDateS
 
 // ─── DayHeaders ───────────────────────────────────────────────────────────────
 
-function DayHeaders({ weekDays, today }: { weekDays: Date[]; today: Date }) {
+function DayHeaders({ weekDays, today, selectedDate, onSelectDay }: { weekDays: Date[]; today: Date; selectedDate: Date; onSelectDay: (d: Date) => void }) {
   return (
-    <div className="flex bg-white rounded-[16px] border border-[#e5e7eb] shrink-0 mx-[32px] max-[1000px]:mx-[12px]" style={{height:56}}>
+    <div className="flex bg-white rounded-[16px] border border-[#e5e7eb] shrink-0 mx-[32px] max-[1000px]:mx-[12px] overflow-hidden" style={{height:56}}>
       <div style={{width:TIME_COL_W}} className="shrink-0"/>
       {weekDays.map((d,i)=>{
-        const isToday=isSameDay(d,today);
+        const isToday    = isSameDay(d,today);
+        const isSelected = isSameDay(d,selectedDate);
         return (
-          <div key={i} className="flex-1 flex flex-col items-center justify-center gap-[2px] border-l border-[#f0f0f0]">
-            <span className="font-semibold text-[#9ca3af] text-[13px]">{DAY_NAMES[i]}</span>
-            {isToday
-              ? <div className="bg-[#213163] size-[28px] rounded-[14px] flex items-center justify-center"><span className="text-white font-bold text-[14px]">{d.getDate()}</span></div>
-              : <span className="font-bold text-[#1b2559] text-[16px]">{d.getDate()}</span>
+          <div
+            key={i}
+            onClick={()=>onSelectDay(d)}
+            className={`flex-1 h-full flex flex-col items-center justify-center gap-[2px] border-l border-[#f0f0f0] cursor-pointer ${isSelected ? "bg-[#213163]" : ""}`}
+          >
+            <span className={`font-semibold text-[13px] ${isSelected ? "text-white" : "text-[#9ca3af]"}`}>{DAY_NAMES[i]}</span>
+            {isSelected
+              ? <span className="text-white font-bold text-[16px]">{d.getDate()}</span>
+              : isToday
+                ? <div className="bg-[#213163] size-[28px] rounded-[14px] flex items-center justify-center"><span className="text-white font-bold text-[14px]">{d.getDate()}</span></div>
+                : <span className="font-bold text-[#1b2559] text-[16px]">{d.getDate()}</span>
             }
           </div>
         );
@@ -558,6 +565,9 @@ export default function Calendar() {
   const today = todayRef.current;
 
   const [viewDate, setViewDate] = useState<Date>(()=>getWeekStart(new Date()));
+  // The exact day picked (via the date-picker or a header click) — distinct
+  // from viewDate, which in week view is normalized to that week's Sunday.
+  const [selectedDate, setSelectedDate] = useState<Date>(()=>new Date());
   const [view, setView]         = useState<"semaine"|"jour">("semaine");
   const isMobile = useIsMobile();
   // Mobile now exposes the same Jour/Semaine toggle as desktop (as icons in
@@ -585,9 +595,9 @@ export default function Calendar() {
 
   // Navigation
   const navigate = (delta:number) => setViewDate(d=>{ const n=new Date(d); n.setDate(d.getDate()+delta*(isDayView?1:7)); return n; });
-  const goToday  = () => { const t=new Date(today); setViewDate(isDayView?t:getWeekStart(t)); };
+  const goToday  = () => { const t=new Date(today); setSelectedDate(t); setViewDate(isDayView?t:getWeekStart(t)); };
   const handleViewChange = (v:"semaine"|"jour") => { setView(v); setViewDate(p=>v==="semaine"?getWeekStart(p):p); };
-  const handleDateSelect = (d:Date) => setViewDate(isDayView?d:getWeekStart(d));
+  const handleDateSelect = (d:Date) => { setSelectedDate(d); setViewDate(isDayView?d:getWeekStart(d)); };
 
   // Grid click → create
   const handleColumnClick = (e:React.MouseEvent<HTMLDivElement>, date:string) => {
@@ -811,7 +821,7 @@ export default function Calendar() {
         {isMobile
           ? <MobileHeader viewDate={viewDate} view={view} onPrev={()=>navigate(-1)} onNext={()=>navigate(1)} onToday={goToday} onViewChange={handleViewChange} onDateSelect={handleDateSelect}/>
           : <TopBar viewDate={viewDate} view={view} onPrev={()=>navigate(-1)} onNext={()=>navigate(1)} onToday={goToday} onViewChange={handleViewChange} onDateSelect={handleDateSelect}/>}
-        {!isDayView&&<DayHeaders weekDays={weekDays} today={today}/>}
+        {!isDayView&&<DayHeaders weekDays={weekDays} today={today} selectedDate={selectedDate} onSelectDay={handleDateSelect}/>}
 
         <div ref={scrollRef} className={`flex-1 overflow-y-auto overflow-x-hidden py-[8px] ${isMobile ? "px-[12px]" : "px-[32px]"}`}>
           {!isDayView ? (
