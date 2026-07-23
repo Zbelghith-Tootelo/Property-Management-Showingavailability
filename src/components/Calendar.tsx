@@ -468,12 +468,10 @@ function DayHeaders({ weekDays, today }: { weekDays: Date[]; today: Date }) {
         return (
           <div key={i} className="flex-1 flex flex-col items-center justify-center gap-[2px] border-l border-[#f0f0f0]">
             <span className="font-semibold text-[#9ca3af] text-[13px]">{DAY_NAMES[i]}</span>
-            <div
-              className="bg-[#213163] size-[28px] rounded-[14px] flex items-center justify-center"
-              style={isToday ? { outline: "2px solid #1aa41d", outlineOffset: 2 } : undefined}
-            >
-              <span className="text-white font-bold text-[14px]">{d.getDate()}</span>
-            </div>
+            {isToday
+              ? <div className="bg-[#213163] size-[28px] rounded-[14px] flex items-center justify-center"><span className="text-white font-bold text-[14px]">{d.getDate()}</span></div>
+              : <span className="font-bold text-[#1b2559] text-[16px]">{d.getDate()}</span>
+            }
           </div>
         );
       })}
@@ -568,7 +566,6 @@ export default function Calendar() {
   const [events, setEvents]     = useState<CalendarEvent[]>([]);
   const [modal, setModal]       = useState<ModalState|null>(null);
   const [overlapError, setOverlapError] = useState<string|null>(null);
-  const [toast, setToast]       = useState<string|null>(null);
 
   const [dragging, setDragging]     = useState<DragState|null>(null);
   const [resizing, setResizing]     = useState<ResizeState|null>(null);
@@ -576,12 +573,6 @@ export default function Calendar() {
   const draggingRef = useRef(dragging); draggingRef.current = dragging;
   const resizingRef = useRef(resizing); resizingRef.current = resizing;
   const eventsRef   = useRef(events);   eventsRef.current = events;
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2500);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   // Grid refs for coordinate math
   const gridRef   = useRef<HTMLDivElement>(null);
@@ -602,10 +593,7 @@ export default function Calendar() {
   const handleColumnClick = (e:React.MouseEvent<HTMLDivElement>, date:string) => {
     if ((e.target as HTMLElement).closest("[data-event]")) return;
     if (draggingRef.current || resizingRef.current) return;
-    if (isPastDate(date, today)) {
-      setToast("Action non autorisée : la date doit être aujourd'hui ou une date future.");
-      return;
-    }
+    if (isPastDate(date, today)) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const y    = e.clientY - rect.top;
     const rawMin  = HOUR_START*60 + (y/ROW_HEIGHT)*60;
@@ -809,9 +797,8 @@ export default function Calendar() {
   const TimeCol = () => (
     <div style={{width:TIME_COL_W}} className="shrink-0 border-r border-[#f0f0f0]">
       {HOURS.map(h=>(
-        <div key={h} className="flex items-center justify-center gap-[6px] border-b border-[#f0f0f0]" style={{height:ROW_HEIGHT}}>
+        <div key={h} className="flex items-center justify-center border-b border-[#f0f0f0]" style={{height:ROW_HEIGHT}}>
           <span className="font-medium text-[#9ca3af] text-[14px]">{h}h</span>
-          <span className="block h-[1px] w-[8px] bg-[#d1d5db] shrink-0" />
         </div>
       ))}
     </div>
@@ -835,10 +822,9 @@ export default function Calendar() {
                 const dayEvts  = events.filter(ev=>ev.date===isoDate);
                 const ghostHere = dragging && dragging.curDate===isoDate;
                 const ghostType = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
-                const isPastCol = isPastDate(isoDate, today);
                 return (
-                  <div key={dayIdx} className="flex-1 relative border-l border-[#f0f0f0]" style={{minHeight:gridHeight,cursor:dragging?"grabbing":isPastCol?"not-allowed":"pointer"}} onClick={e=>handleColumnClick(e,isoDate)}>
-                    {HOURS.map(h=><div key={h} className={`border-b border-[#f0f0f0] transition-colors ${isPastCol ? "hover:bg-[#fef2f2]" : "hover:bg-[#f9fbff]"}`} style={{height:ROW_HEIGHT}}/>)}
+                  <div key={dayIdx} className="flex-1 relative border-l border-[#f0f0f0]" style={{minHeight:gridHeight,cursor:dragging?"grabbing":"pointer"}} onClick={e=>handleColumnClick(e,isoDate)}>
+                    {HOURS.map(h=><div key={h} className="border-b border-[#f0f0f0] hover:bg-[#f9fbff] transition-colors" style={{height:ROW_HEIGHT}}/>)}
                     {dayEvts.map(ev=>(
                       <EventCard
                         key={ev.id}
@@ -863,10 +849,9 @@ export default function Calendar() {
                 const isoDate = dateToISO(viewDate);
                 const dayEvts = events.filter(ev=>ev.date===isoDate);
                 const ghostType = dragging ? eventsRef.current.find(ev=>ev.id===dragging.id)?.type : undefined;
-                const isPastCol = isPastDate(isoDate, today);
                 return (
-                  <div className="flex-1 relative" style={{minHeight:gridHeight,cursor:dragging?"grabbing":isPastCol?"not-allowed":"pointer"}} onClick={e=>handleColumnClick(e,isoDate)}>
-                    {HOURS.map(h=><div key={h} className={`border-b border-[#f0f0f0] transition-colors ${isPastCol ? "hover:bg-[#fef2f2]" : "hover:bg-[#f9fbff]"}`} style={{height:ROW_HEIGHT}}/>)}
+                  <div className="flex-1 relative" style={{minHeight:gridHeight,cursor:dragging?"grabbing":"pointer"}} onClick={e=>handleColumnClick(e,isoDate)}>
+                    {HOURS.map(h=><div key={h} className="border-b border-[#f0f0f0] hover:bg-[#f9fbff] transition-colors" style={{height:ROW_HEIGHT}}/>)}
                     {dayEvts.map(ev=>(
                       <EventCard
                         key={ev.id}
@@ -900,15 +885,6 @@ export default function Calendar() {
           onSave={handleSave}
           onDelete={modal.mode==="edit"?handleDelete:undefined}
         />
-      )}
-
-      {toast && (
-        <div className="fixed bottom-[24px] left-1/2 -translate-x-1/2 z-[100] flex items-center gap-[8px] px-[16px] py-[12px] rounded-[10px] bg-[#213163] shadow-[0px_8px_20px_rgba(0,0,0,0.24)]">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <span className="text-white text-[14px] font-medium">{toast}</span>
-        </div>
       )}
     </div>
   );
